@@ -15,8 +15,17 @@
 
 #define printx(x) write(1, x, strlen(x))
 
+typedef struct {
+    void** pointers;
+    int numPointers;
+} PointersToFree;
+
+void addPointerToList(void* pointer, PointersToFree* pointers_list2);
+
 char* readUntilEitherChar(int fd, char endChar, char endChar2, int* endChar2Found);
 
 char* readUntilChar(int fd, char endChar);
 
 void printDynStr(char* buffer, int bufferSize);
+
+char* getGlobalsCurrentInputPointer();

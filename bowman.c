@@ -1,5 +1,4 @@
 #include "globals.h"
-#include "pointerList.h"
 
 #define CONNECT_CMD 1
 #define LOGOUT_CMD 2
@@ -20,6 +19,10 @@ typedef struct {
     int port;
 } ClientConfig;
 
+
+PointersToFree pointers_list = {.numPointers = 0};
+
+int fd_config;
 
 ClientConfig readConfigFile(int fd_config) {
 
@@ -178,7 +181,6 @@ char* readFirstCommandWord(char* command) {
     }
     command1[j] = '\0';
 
-    //TODO: Review function
     return command1;
 }
 
@@ -221,7 +223,6 @@ char* readSecondCommandWord(char* command) {
 
     return command2;
     
-    //TODO: Review function
 }
 
 
@@ -406,7 +407,23 @@ void enterCommandMode() {
 
 void terminateExecution () {
 
-    //printx("\n\nTerminating execution...\n\n");
+    char* currentInputPointer = getGlobalsCurrentInputPointer();
+
+    for (int i = 0; i < pointers_list.numPointers; i++) {
+        if (pointers_list.pointers[i] != NULL) {
+            free(pointers_list.pointers[i]);
+        }
+    }
+
+    if (pointers_list.pointers != NULL) {
+        free(pointers_list.pointers);
+    }
+
+    if (currentInputPointer != NULL) {
+        free(currentInputPointer);
+    }
+
+    close (fd_config);
 
     signal(SIGINT, SIG_DFL);
     raise(SIGINT);
@@ -415,7 +432,6 @@ void terminateExecution () {
 
 int main (int argc, char** argv) {
 
-    int fd_config;
     ClientConfig client_config;
 
     signal(SIGINT, terminateExecution);
@@ -436,21 +452,20 @@ int main (int argc, char** argv) {
         client_config = readConfigFile(fd_config);
     }
 
+    addPointerToList(client_config.files_folder, &pointers_list);
+    addPointerToList(client_config.ip, &pointers_list);
+    addPointerToList(client_config.name, &pointers_list);
+
     printInitMsg(client_config.name);
 
     printConfigFile(client_config);
 
     enterCommandMode();
-
-    free(client_config.files_folder);
-    free(client_config.ip);
-    free(client_config.name);
-
-    close (fd_config);
+    
+    terminateExecution();
 
     return 0;
+    
 }
 
-
-//TODO: Associate SIGINT, SIGTERM with function to liberate memory. 
 //TODO: Create .c and .h for the readConfig functions and the command processing functions (except the function "enterCommandMode")

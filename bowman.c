@@ -1,4 +1,5 @@
 #include "globals.h"
+#include "bowmanConfig.h"
 
 #define CONNECT_CMD 1
 #define LOGOUT_CMD 2
@@ -12,79 +13,10 @@
 #define INVALID_CMD 10
 #define NO_CMD 11
 
-typedef struct {
-    char* name;
-    char* files_folder;
-    char* ip;
-    int port;
-} ClientConfig;
-
 
 PointersToFree pointers_list = {.numPointers = 0};
 
 int fd_config;
-
-ClientConfig readConfigFile(int fd_config) {
-
-    ClientConfig client_config;
-    char* port;
-
-    client_config.name = readUntilChar(fd_config, '\n');
-    client_config.files_folder = readUntilChar(fd_config, '\n');
-    client_config.ip = readUntilChar(fd_config, '\n');
-
-    port = readUntilChar(fd_config, ' ');   //Does not matter which end character we send
-    client_config.port = atoi(port);   
-    free(port);
-
-    return client_config;
-}
-
-
-void printConfigFile(ClientConfig client_config) {
-    
-    char* buffer;
-    int buffSize;
-
-    printx("\nFile read correctly:\n");
-    buffSize = asprintf(&buffer, "User - %s\n", client_config.name);
-    printDynStr(buffer, buffSize);
-    free(buffer);
-    buffSize = asprintf(&buffer, "Directory - %s\n", client_config.files_folder);
-    printDynStr(buffer, buffSize);
-    free(buffer);
-    buffSize = asprintf(&buffer, "IP - %s\n", client_config.ip);
-    printDynStr(buffer, buffSize);
-    free(buffer);
-    buffSize = asprintf(&buffer, "Port - %d\n\n", client_config.port);
-    printDynStr(buffer, buffSize);
-    free(buffer);
-
-}
-
-void checkUsernameFormat(char* username) {
-    
-    char* forbiddenChar;
-
-    while (strchr(username, '&') != NULL) {
-        forbiddenChar = strchr(username, '&');
-        *forbiddenChar = ' ';
-    }
-
-}
-
-void printInitMsg(char* username) {
-
-    char* buffer;
-    int bufferSize;
-
-    checkUsernameFormat(username);
-
-    bufferSize = asprintf(&buffer, "\n%s user initialized\n", username);
-    printDynStr(buffer, bufferSize);
-    free(buffer);
-
-}
 
 int hasMp3Extension(char* str) {
     
@@ -465,7 +397,7 @@ int main (int argc, char** argv) {
     terminateExecution();
 
     return 0;
-    
+
 }
 
 //TODO: Create .c and .h for the readConfig functions and the command processing functions (except the function "enterCommandMode")

@@ -1,13 +1,16 @@
 all: bowman poole
 
+bowmanConfig.o: bowmanConfig.c bowmanConfig.h globals.h
+	gcc -c bowmanConfig.c -Wall -Wextra
+
 globals.o: globals.c globals.h
 	gcc -c globals.c -Wall -Wextra
 
-bowman.o: bowman.c globals.h
+bowman.o: bowman.c globals.h bowmanConfig.h
 	gcc -c bowman.c -Wall -Wextra
 
-bowman: bowman.o globals.o 
-	gcc bowman.o globals.o -o bowman -Wall -Wextra
+bowman: bowman.o globals.o bowmanConfig.o
+	gcc bowman.o globals.o bowmanConfig.o -o bowman -Wall -Wextra
 
 poole.o: poole.c globals.h
 	gcc -c poole.c -Wall -Wextra

@@ -17,7 +17,6 @@ void addPointerToList(void* pointer, PointersToFree* pointers_list2) {
 
     (*pointers_list2).pointers[numPointers] = pointer;
     (*pointers_list2).numPointers += 1;
-    printx("added");
 
 }
 

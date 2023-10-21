@@ -93,6 +93,11 @@ int hasMp3Extension(char* str) {
 
     dotPos = strchr(str, '.');
 
+    if (dotPos == NULL) {
+        free(extension);
+        return 0;
+    }
+
     do {
         extension = realloc(extension, sizeof(char) * (i + 2));
         extension[i] = *(dotPos + i);
@@ -109,8 +114,8 @@ int hasMp3Extension(char* str) {
 }
 
 int validFirstCommandWord(char* command1) {
-    return ((strcasecmp("CONNECT", command1) || strcasecmp("LOGOUT", command1) || strcasecmp("LIST", command1) 
-            || strcasecmp("DOWNLOAD", command1) || strcasecmp("CHECK", command1) || strcasecmp("CLEAR", command1)) == 0);
+    return ((strcasecmp("CONNECT", command1) && strcasecmp("LOGOUT", command1) && strcasecmp("LIST", command1) 
+            && strcasecmp("DOWNLOAD", command1) && strcasecmp("CHECK", command1) && strcasecmp("CLEAR", command1)) == 0);
 }
 
 int wordsNum(char* str) {
@@ -160,13 +165,17 @@ char* readFirstCommandWord(char* command) {
         }
     }
 
-    do {
-        command1 = realloc(command1, sizeof(char) * (j + 2));
-        command1[j] = command[i];
+    while (command[i] != ' ' && command[i] != '\0') {
+        
+        if (command[i] != ' ') {
+            command1 = realloc(command1, sizeof(char) * (j + 2));
+            command1[j] = command[i];
+            j++;
+        }
         i++;
-        j++;
-    } while (command[i] != ' ' && command[i] != '\0');
-    command1[i] = '\0';   
+
+    }
+    command1[j] = '\0';
 
     //TODO: Review function
     return command1;
@@ -198,10 +207,14 @@ char* readSecondCommandWord(char* command) {
     }
 
     while (command[i] != '\0') {
-        command2 = realloc(command2, sizeof(char) * (j + 2));
-        command2[j] = command[i];
+        
+        if (command[i] != ' ') {
+            command2 = realloc(command2, sizeof(char) * (j + 2));
+            command2[j] = command[i];
+            j++;
+        }
         i++;
-        j++;
+
     }
     command2[j] = '\0';
 
@@ -210,9 +223,62 @@ char* readSecondCommandWord(char* command) {
     //TODO: Review function
 }
 
-int commandToCmdCaseNum(char* command) {
 
-    //TODO: Separate in two methods "processSingleWordCmd" and "processDoubleWordCmd"
+int processSingleWordCmd(char* command1) {
+
+    int command_case_num;
+
+    if (strcasecmp("CONNECT", command1) == 0) {
+        command_case_num = CONNECT_CMD;
+    } else if (strcasecmp("LOGOUT", command1) == 0) {
+        command_case_num = LOGOUT_CMD;
+    } else if (validFirstCommandWord(command1)) {
+        //If the command is not CONNECT or LOGOUT but it is the first word of one of the commands that require two words, the command is unknown
+        command_case_num = PARTIALLY_CORRECT_CMD;
+    } else {
+        //If the command is not CONNECT or LOGOUT and it is not the first word of one of the commands that require two words, the command is invalid
+        command_case_num = INVALID_CMD;
+    }
+
+    return command_case_num;
+
+}
+
+int processDoubleWordCmd(char* command1, char* command2) {
+
+    int command_case_num;
+
+    if (validFirstCommandWord(command1)) {
+
+        if ((strcasecmp("LIST", command1) || strcasecmp("SONGS", command2)) == 0) {
+            command_case_num = LIST_SONGS_CMD;
+        } else if ((strcasecmp("LIST", command1) || strcasecmp("PLAYLISTS", command2)) == 0) {
+            command_case_num = LIST_PLAYLISTS_CMD;
+        } else if (strcasecmp("DOWNLOAD", command1) == 0) {
+            if (hasMp3Extension(command2)) {
+                command_case_num = DOWNLOAD_SONG_CMD;
+            } else {
+                command_case_num = DOWNLOAD_PLAYLIST_CMD;
+            }  
+        } else if ((strcasecmp("CHECK", command1) || strcasecmp("DOWNLOADS", command2)) == 0) {
+            command_case_num = CHECK_DOWNLOADS_CMD;
+        } else if ((strcasecmp("CLEAR", command1) || strcasecmp("DOWNLOADS", command2)) == 0) {
+            command_case_num = CLEAR_DOWNLOADS_CMD;
+        } else {
+            //First word of command was valid, but the second word is unknown
+            command_case_num = PARTIALLY_CORRECT_CMD;
+        };
+
+    } else {
+        //First part of command was invalid, all the command is invalid
+        command_case_num = INVALID_CMD;
+    }
+
+    return command_case_num;
+
+}
+
+int commandToCmdCaseNum(char* command) {
 
     int command_case_num = NO_CMD;
 
@@ -232,51 +298,17 @@ int commandToCmdCaseNum(char* command) {
     command1 = readFirstCommandWord(command);
 
     if (words_num == 1) {
-
         //The command does not contain spaces, it is a single word
-        if (strcasecmp("CONNECT", command1) == 0) {
-                    command_case_num = CONNECT_CMD;
-        } else if (strcasecmp("LOGOUT", command1) == 0) {
-                    command_case_num = LOGOUT_CMD;
-        } else if (validFirstCommandWord(command1)) {
-            //If the command is not CONNECT or LOGOUT but it is the first word of one of the commands that require two words, the command is unknown
-            command_case_num = PARTIALLY_CORRECT_CMD;
-        } else {
-            //If the command is not CONNECT or LOGOUT and it is not the first word of one of the commands that require two words, the command is invalid
-            command_case_num = INVALID_CMD;
-        }
+
+        command_case_num = processSingleWordCmd(command1);
     }
 
     if (words_num == 2) {
         //The command has two words 
 
         command2 = readSecondCommandWord(command);
-      
-        if (validFirstCommandWord(command1)) {
 
-            if ((strcasecmp("LIST", command1) && strcasecmp("SONGS", command2)) == 0) {
-                command_case_num = LIST_SONGS_CMD;
-            } else if ((strcasecmp("LIST", command1) && strcasecmp("PLAYLISTS", command2)) == 0) {
-                command_case_num = LIST_PLAYLISTS_CMD;
-            } else if (strcasecmp("DOWNLOAD", command1) == 0) {
-                if (hasMp3Extension(command2)) {
-                    command_case_num = DOWNLOAD_SONG_CMD;
-                } else {
-                    command_case_num = DOWNLOAD_PLAYLIST_CMD;
-                }  
-            } else if ((strcasecmp("CHECK", command1) && strcasecmp("DOWNLOADS", command2)) == 0) {
-                command_case_num = CHECK_DOWNLOADS_CMD;
-            } else if ((strcasecmp("CLEAR", command1) && strcasecmp("DOWNLOADS", command2)) == 0) {
-                command_case_num = CLEAR_DOWNLOADS_CMD;
-            } else {
-                //First word of command was valid, but the second word is unknown
-                command_case_num = PARTIALLY_CORRECT_CMD;
-            };
-
-        } else {
-            //First part of command was invalid, all the command is invalid
-            command_case_num = INVALID_CMD;
-        }
+        command_case_num = processDoubleWordCmd(command1, command2);
 
         free(command2);
 
@@ -318,39 +350,48 @@ void enterCommandMode() {
         switch (command_case_num) {
             case CONNECT_CMD:
                 printx("Comanda OK\n");
+                printx("CONNECT_CMD\n");
                 break;
             case LOGOUT_CMD:
                 printx("Comanda OK\n");
+                printx("LOGOUT_CMD\n");
                 break;
             case LIST_SONGS_CMD:
                 printx("Comanda OK\n");
+                printx("LIST_SONGS_CMD\n");
                 break;
             case LIST_PLAYLISTS_CMD:
                 printx("Comanda OK\n");
+                printx("LIST_PLAYLISTS_CMD\n");
                 break;
             case DOWNLOAD_SONG_CMD:
                 printx("Comanda OK\n");
+                printx("DOWNLOAD_SONG_CMD\n");
                 break;
             case DOWNLOAD_PLAYLIST_CMD:
                 printx("Comanda OK\n");
+                printx("DOWNLOAD_PLAYLIST_CMD\n");
                 break;
             case CHECK_DOWNLOADS_CMD:
                 printx("Comanda OK\n");
+                printx("CHECK_DOWNLOADS_CMD\n");
                 break;
             case CLEAR_DOWNLOADS_CMD:
                 printx("Comanda OK\n");
+                printx("CLEAR_DOWNLOADS_CMD\n");
                 break;
             case PARTIALLY_CORRECT_CMD:
                 printx("Comanda KO\n");
+                printx("PARTIALLY_CORRECT_CMD\n");
                 //Unknown command
                 break;
             case INVALID_CMD:
                 printx("Comanda KO\n");
+                printx("INVALID_CMD\n");
                 //Not valid command
                 break;
             case NO_CMD:
                 //No command entered
-                printx("No command\n");
                 break;
             default:
                 break;
@@ -385,8 +426,6 @@ int main (int argc, char** argv) {
     printConfigFile(client_config);
 
     enterCommandMode();
-
-    //TODO: Enter COMMAND mode
 
     return 0;
 }

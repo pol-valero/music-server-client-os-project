@@ -1,4 +1,5 @@
 #include "globals.h"
+#include "pointerList.h"
 
 #define CONNECT_CMD 1
 #define LOGOUT_CMD 2
@@ -402,10 +403,23 @@ void enterCommandMode() {
 
 }
 
+
+void terminateExecution () {
+
+    //printx("\n\nTerminating execution...\n\n");
+
+    signal(SIGINT, SIG_DFL);
+    raise(SIGINT);
+
+}
+
 int main (int argc, char** argv) {
 
     int fd_config;
     ClientConfig client_config;
+
+    signal(SIGINT, terminateExecution);
+    signal(SIGTERM, terminateExecution);
 
 
     if (argc < 2) {

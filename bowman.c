@@ -439,3 +439,4 @@ int main (int argc, char** argv) {
 
 
 //TODO: Associate SIGINT, SIGTERM with function to liberate memory. 
+//TODO: Create .c and .h for the readConfig functions and the command processing functions (except the function "enterCommandMode")

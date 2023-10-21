@@ -49,7 +49,7 @@ void printConfigFile(ClientConfig client_config) {
     printDynStr(buffer, buffSize);
     buffSize = asprintf(&buffer, "IP - %s\n", client_config.ip);
     printDynStr(buffer, buffSize);
-    buffSize = asprintf(&buffer, "Port - %d\n", client_config.port);
+    buffSize = asprintf(&buffer, "Port - %d\n\n", client_config.port);
     printDynStr(buffer, buffSize);
 
     free(buffer);
@@ -87,16 +87,24 @@ int hasMp3Extension(char* str) {
     int i = 0;
     char* dotPos;
     char* extension;
+    int hasMp3Extension = 0;
+
+    extension = malloc(sizeof(char));
 
     dotPos = strchr(str, '.');
 
     do {
+        extension = realloc(extension, sizeof(char) * (i + 2));
         extension[i] = *(dotPos + i);
         i++;
     } while (*(dotPos + i) != '\0');
     extension[i] = '\0';
 
-    return (strcasecmp(".mp3", extension) == 0);
+    hasMp3Extension = (strcasecmp(".mp3", extension) == 0);
+
+    free(extension);
+
+    return hasMp3Extension;
 
 }
 
@@ -106,31 +114,100 @@ int validFirstCommandWord(char* command1) {
 }
 
 int wordsNum(char* str) {
-    //TODO: Do function
+
+    int words_num = 0;
+    int i = 0;
+
+    if (str[0] == '\0') {
+        words_num = 0;
+        return words_num;
+    } 
+
+    if (str[0] != ' ') {
+        words_num = 1;
+        while (str[i] != '\0') {
+            if (str[i] == ' ' && str[i + 1] != ' ' && str[i + 1] != '\0') {
+                words_num++;
+            }
+            i++;
+        }
+    } else {
+        while (str[i] != '\0') {
+            if (str[i] == ' ' && str[i + 1] != ' '  && str[i + 1] != '\0') {
+                words_num++;
+            }
+            i++;
+        }
+    }
+
+    write(1, &words_num, sizeof(int));
+
+    return words_num;
 }
 
 char* readFirstCommandWord(char* command) {
   
     char* command1;
     int i = 0;
+    int j = 0;
+
+    command1 = malloc(sizeof(char));
+
+    if (command[0] == ' ') {
+        //If the first character is a space, we move the pointer until we encounter a non-space character
+        while (command[i] == ' ') {
+            i++;
+        }
+    }
 
     do {
-        command1[i] = command[i];
-         i++;
-    } while (command[i] != ' ');
+        command1 = realloc(command1, sizeof(char) * (j + 2));
+        command1[j] = command[i];
+        i++;
+        j++;
+    } while (command[i] != ' ' && command[i] != '\0');
     command1[i] = '\0';   
 
     //TODO: Review function
-
+    return command1;
 }
 
 char* readSecondCommandWord(char* command) {
 
     char* command2;
     int i = 0;
+    int j = 0;
 
-    //TODO: Do function
+    command2 = malloc(sizeof(char));
+
+    if (command[0] == ' ') {
+        //If the first character is a space, we move the pointer until we encounter a non-space character
+        while (command[i] == ' ') {
+            i++;
+        }
+    }
+
+    //We move the pointer until we encounter a space
+    while (command[i] != ' ') {
+        i++;
+    };
+
+    //We move the pounter past all the spaces
+    while (command[i] == ' ') {
+        i++;
+    }
+
+    while (command[i] != '\0') {
+        command2 = realloc(command2, sizeof(char) * (j + 2));
+        command2[j] = command[i];
+        i++;
+        j++;
+    }
+    command2[j] = '\0';
+
+    return command2;
     
+    //TODO: Review function
 }
 
 int commandToCmdCaseNum(char* command) {
@@ -138,8 +215,6 @@ int commandToCmdCaseNum(char* command) {
     //TODO: Separate in two methods "processSingleWordCmd" and "processDoubleWordCmd"
 
     int command_case_num = NO_CMD;
-
-    int i = 0;
 
     char* command1;
     char* command2; 
@@ -203,6 +278,8 @@ int commandToCmdCaseNum(char* command) {
             command_case_num = INVALID_CMD;
         }
 
+        free(command2);
+
     } 
 
     if (words_num > 2) {
@@ -218,6 +295,8 @@ int commandToCmdCaseNum(char* command) {
             }
 
     }
+
+    free(command1);
 
     return command_case_num;
 }
@@ -235,17 +314,45 @@ void enterCommandMode() {
         command_case_num = commandToCmdCaseNum(command);
         free(command);
 
+
         switch (command_case_num) {
-            case DOWNLOAD_CMD:
+            case CONNECT_CMD:
+                printx("Comanda OK\n");
+                break;
+            case LOGOUT_CMD:
+                printx("Comanda OK\n");
+                break;
+            case LIST_SONGS_CMD:
+                printx("Comanda OK\n");
+                break;
+            case LIST_PLAYLISTS_CMD:
+                printx("Comanda OK\n");
+                break;
+            case DOWNLOAD_SONG_CMD:
+                printx("Comanda OK\n");
+                break;
+            case DOWNLOAD_PLAYLIST_CMD:
+                printx("Comanda OK\n");
+                break;
+            case CHECK_DOWNLOADS_CMD:
+                printx("Comanda OK\n");
+                break;
+            case CLEAR_DOWNLOADS_CMD:
+                printx("Comanda OK\n");
                 break;
             case PARTIALLY_CORRECT_CMD:
+                printx("Comanda KO\n");
                 //Unknown command
                 break;
             case INVALID_CMD:
+                printx("Comanda KO\n");
                 //Not valid command
                 break;
+            case NO_CMD:
+                //No command entered
+                printx("No command\n");
+                break;
             default:
-
                 break;
         }
 

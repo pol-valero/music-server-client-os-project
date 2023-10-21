@@ -45,16 +45,16 @@ void printConfigFile(ClientConfig client_config) {
     printx("\nFile read correctly:\n");
     buffSize = asprintf(&buffer, "User - %s\n", client_config.name);
     printDynStr(buffer, buffSize);
+    free(buffer);
     buffSize = asprintf(&buffer, "Directory - %s\n", client_config.files_folder);
     printDynStr(buffer, buffSize);
+    free(buffer);
     buffSize = asprintf(&buffer, "IP - %s\n", client_config.ip);
     printDynStr(buffer, buffSize);
+    free(buffer);
     buffSize = asprintf(&buffer, "Port - %d\n\n", client_config.port);
     printDynStr(buffer, buffSize);
-
     free(buffer);
-
-    //TODO: Free buffer every time? Check with valgrind
 
 }
 
@@ -355,6 +355,7 @@ void enterCommandMode() {
             case LOGOUT_CMD:
                 printx("Comanda OK\n");
                 printx("LOGOUT_CMD\n");
+                exit_flag = 1;
                 break;
             case LIST_SONGS_CMD:
                 printx("Comanda OK\n");
@@ -426,6 +427,12 @@ int main (int argc, char** argv) {
     printConfigFile(client_config);
 
     enterCommandMode();
+
+    free(client_config.files_folder);
+    free(client_config.ip);
+    free(client_config.name);
+
+    close (fd_config);
 
     return 0;
 }

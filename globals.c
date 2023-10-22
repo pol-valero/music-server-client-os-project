@@ -77,6 +77,7 @@ char* readUntilChar(int fd, char endChar) {
 
     string[i] = '\0';
 
+    currentInputPointer = NULL; //If we can return the string because no SIGNALs have interrupted the program, we set the pointer to NULL so it is not freed (we will free the string)
     return string;
 }
 

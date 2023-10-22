@@ -6,7 +6,7 @@ PointersToFree pointers_list = {.numPointers = 0};
 
 int fd_config;
 
-void enterCommandMode() {
+/* void enterCommandMode() {
 
     char* command;
     int command_case_num = NO_CMD;
@@ -36,7 +36,7 @@ void enterCommandMode() {
         }
     } while (command_case_num != LOGOUT_CMD);
 
-}
+} */
 
 void terminateExecution () {
     char* currentInputPointer = getGlobalsCurrentInputPointer();
@@ -87,10 +87,9 @@ int main (int argc, char** argv) {
     addPointerToList(server_config.ip_server, &pointers_list);
 
     printInitMsg(server_config.name);
-    printf("%s\n\n",server_config.name);
     printConfigFile(server_config);
 
-    enterCommandMode();
+    //enterCommandMode();
     
     terminateExecution();
 

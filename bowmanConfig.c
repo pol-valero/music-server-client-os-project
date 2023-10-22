@@ -40,18 +40,15 @@ void printConfigFile(ClientConfig client_config) {
 }
 
 void checkUsernameFormat(char* username) {
-    
     char* forbiddenChar;
 
     while (strchr(username, '&') != NULL) {
         forbiddenChar = strchr(username, '&');
         *forbiddenChar = ' ';
     }
-
 }
 
 void printInitMsg(char* username) {
-
     char* buffer;
     int bufferSize;
 

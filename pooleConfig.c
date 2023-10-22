@@ -24,11 +24,11 @@ ServerConfig readConfigFile(int fd_config) {
     return server_config;
 }
 
-void printInitMsg(char* username) {
+void printInitMsg(char* serverName) {
     char* buffer;
     int bufferSize;
 
-    bufferSize = asprintf(&buffer, "\n%s server initialized\n", username);
+    bufferSize = asprintf (&buffer, "\n%s server initialized\n", serverName);
     printDynStr(buffer, bufferSize);
     free(buffer);
 }
@@ -59,7 +59,7 @@ void printConfigFile(ServerConfig server_config) {
     printDynStr(buffer, buffSize);
     free(buffer);
     
-    buffSize = asprintf(&buffer, "Port Server - %d\n\n", server_config.port_server);
+    buffSize = asprintf(&buffer, "Port Server - %d\n", server_config.port_server);
     printDynStr(buffer, buffSize);
     free(buffer);
 }

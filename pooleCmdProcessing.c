@@ -1,4 +1,4 @@
-#include "pooleCmdProcessing.h"
+/* #include "pooleCmdProcessing.h"
 #include "globals.h"
 
 int wordsNum(char* str) {
@@ -109,4 +109,4 @@ int commandToCmdCaseNum(char* command) {
     return command_case_num;
 
     
-}
+} */

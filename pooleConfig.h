@@ -9,6 +9,6 @@ typedef struct {
 
 ServerConfig readConfigFile(int fd_config);
 
-void printInitMsg(char* username);
+void printInitMsg(char* serverName);
 
 void printConfigFile(ServerConfig client_config);

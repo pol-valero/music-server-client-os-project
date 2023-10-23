@@ -15,17 +15,14 @@ bowman.o: bowman.c globals.h bowmanConfig.h
 bowman: bowman.o globals.o bowmanConfig.o bowmanCmdProcessing.o
 	gcc bowman.o globals.o bowmanConfig.o bowmanCmdProcessing.o -o bowman -Wall -Wextra
 
-pooleCmdProcessing.o: pooleCmdProcessing.c pooleCmdProcessing.h globals.h
-	gcc -c pooleCmdProcessing.c -Wall -Wextra
-
 pooleConfig.o: pooleConfig.c pooleConfig.h globals.h
 	gcc -c pooleConfig.c -Wall -Wextra
 
 poole.o: poole.c globals.h pooleConfig.h
 	gcc -c poole.c -Wall -Wextra
 
-poole: poole.o globals.o pooleConfig.o pooleCmdProcessing.o
-	gcc poole.o globals.o pooleConfig.o pooleCmdProcessing.o -o poole -Wall -Wextra
+poole: poole.o globals.o pooleConfig.o
+	gcc poole.o globals.o pooleConfig.o -o poole -Wall -Wextra
 
 .PHONY: clean
 clean:

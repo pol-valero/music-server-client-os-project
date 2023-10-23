@@ -1,42 +1,9 @@
 #include "globals.h"
 #include "pooleConfig.h"
-#include "pooleCmdProcessing.h"
 
 PointersToFree pointers_list = {.numPointers = 0};
 
 int fd_config;
-
-/* void enterCommandMode() {
-
-    char* command;
-    int command_case_num = NO_CMD;
-
-    do {
-        printx("$ ");
-        command = readUntilChar(STDIN_FILENO, '\n');
-        command_case_num = commandToCmdCaseNum(command);
-        free(command);
-
-
-        switch (command_case_num) {
-            case LOGOUT_CMD:
-                printx("Comanda OK\n");
-                //printx("LOGOUT_CMD\n");
-                break;
-            case INVALID_CMD:
-                printx("Comanda KO\n");
-                //printx("INVALID_CMD\n");
-                //Not valid command
-                break;
-            case NO_CMD:
-                //No command entered
-                break;
-            default:
-                break;
-        }
-    } while (command_case_num != LOGOUT_CMD);
-
-} */
 
 void terminateExecution () {
     char* currentInputPointer = getGlobalsCurrentInputPointer();
@@ -88,8 +55,6 @@ int main (int argc, char** argv) {
 
     printInitMsg(server_config.name);
     printConfigFile(server_config);
-
-    //enterCommandMode();
     
     terminateExecution();
 

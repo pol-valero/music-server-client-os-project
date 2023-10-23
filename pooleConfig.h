@@ -1,3 +1,6 @@
+#ifndef _POOLE_CONFIG_H_
+#define _POOLE_CONFIG_H_
+
 typedef struct {
     char* name;
     char* files_folder;
@@ -12,3 +15,5 @@ ServerConfig readConfigFile(int fd_config);
 void printInitMsg(char* serverName);
 
 void printConfigFile(ServerConfig client_config);
+
+#endif

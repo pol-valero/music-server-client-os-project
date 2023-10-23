@@ -1,3 +1,6 @@
+#ifndef _GLOBALS_H_
+#define _GLOBALS_H_
+
 #define _XOPEN_SOURCE 500
 #define _GNU_SOURCE
 
@@ -29,3 +32,5 @@ char* readUntilChar(int fd, char endChar);
 void printDynStr(char* buffer, int bufferSize);
 
 char* getGlobalsCurrentInputPointer();
+
+#endif

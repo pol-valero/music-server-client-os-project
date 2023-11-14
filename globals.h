@@ -29,8 +29,11 @@ char* readUntilEitherChar(int fd, char endChar, char endChar2, int* endChar2Foun
 
 char* readUntilChar(int fd, char endChar);
 
+char* readUntilCharExceptLetter(int fd, char endChar, char exception);
+
 void printDynStr(char* buffer, int bufferSize);
 
 char* getGlobalsCurrentInputPointer();
+
 
 #endif

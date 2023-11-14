@@ -113,6 +113,9 @@ int main (int argc, char** argv) {
     if (argc < 2) {
         printx("\nERROR: You must enter a the configuration file name as a parameter\n");
         return 0;
+    } else if(argc > 2){
+        printx("\nERROR: More arguments than needed.\n");
+        return 0;
     }
 
     fd_config = open(argv[1], O_RDONLY);
@@ -127,8 +130,6 @@ int main (int argc, char** argv) {
     addPointerToList(client_config.files_folder, &pointers_list);
     addPointerToList(client_config.ip, &pointers_list);
     addPointerToList(client_config.name, &pointers_list);
-
-    printInitMsg(client_config.name);
 
     printConfigFile(client_config);
 

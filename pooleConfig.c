@@ -6,7 +6,7 @@ ServerConfig readConfigFile(int fd_config) {
     ServerConfig server_config;
     char* port;
 
-    server_config.name = readUntilChar(fd_config, '\n');
+    server_config.name = readUntilCharExceptLetter(fd_config, '\n', '&');
 
     server_config.files_folder = readUntilChar(fd_config, '\n');
 
@@ -24,18 +24,13 @@ ServerConfig readConfigFile(int fd_config) {
     return server_config;
 }
 
-void printInitMsg(char* serverName) {
-    char* buffer;
-    int bufferSize;
-
-    bufferSize = asprintf (&buffer, "\n%s server initialized\n", serverName);
-    printDynStr(buffer, bufferSize);
-    free(buffer);
-}
-
 void printConfigFile(ServerConfig server_config) {
     char* buffer;
     int buffSize;
+
+    buffSize = asprintf (&buffer, "\n%s server initialized\n", server_config.name);
+    printDynStr(buffer, buffSize);
+    free(buffer);
 
     printx("\nFile read correctly:\n");
 

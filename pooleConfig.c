@@ -1,6 +1,7 @@
 #include "pooleConfig.h"
 #include "globals.h"
 
+// Read the configuration file and return the clientConfig struct with all fields filled.
 ServerConfig readConfigFile(int fd_config) {
 
     ServerConfig server_config;
@@ -24,6 +25,7 @@ ServerConfig readConfigFile(int fd_config) {
     return server_config;
 }
 
+// Print the received configuration.
 void printConfigFile(ServerConfig server_config) {
     char* buffer;
     int buffSize;

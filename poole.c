@@ -5,6 +5,7 @@ PointersToFree pointers_list = {.numPointers = 0};
 
 int fd_config;
 
+// Handle unexpected termination scenarios.
 void terminateExecution () {
     char* currentInputPointer = getGlobalsCurrentInputPointer();
 
@@ -28,6 +29,7 @@ void terminateExecution () {
     raise(SIGINT);
 }
 
+//main function :p
 int main (int argc, char** argv) {
     ServerConfig server_config;
 
@@ -35,17 +37,17 @@ int main (int argc, char** argv) {
     signal(SIGTERM, terminateExecution);
 
     if (argc < 2) {
-        printx("\nERROR: You must enter a the configuration file name as a parameter\n");
+        printEr("\nERROR: You must enter a the configuration file name as a parameter\n");
         return 0;
     } else if(argc > 2){
-        printx("\nERROR: More arguments than needed.\n");
+        printEr("\nERROR: More arguments than needed.\n");
         return 0;
     }
 
     fd_config = open(argv[1], O_RDONLY);
 
     if (fd_config < 0) {
-        printx("\nERROR: Cannot open the file. Filename may be incorrect\n");
+        printEr("\nERROR: Cannot open the file. Filename may be incorrect\n");
         return 0;
     }
 
@@ -55,7 +57,7 @@ int main (int argc, char** argv) {
     addPointerToList(server_config.files_folder, &pointers_list);
     addPointerToList(server_config.ip, &pointers_list);
     addPointerToList(server_config.ip_server, &pointers_list);
-    
+
     printConfigFile(server_config);
     
     terminateExecution();

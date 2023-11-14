@@ -1,6 +1,7 @@
 #include "bowmanConfig.h"
 #include "globals.h"
 
+// Read the configuration file and return the clientConfig struct with all fields filled.
 ClientConfig readConfigFile(int fd_config) {
 
     ClientConfig client_config;
@@ -17,7 +18,7 @@ ClientConfig readConfigFile(int fd_config) {
     return client_config;
 }
 
-
+// Print the received configuration.
 void printConfigFile(ClientConfig client_config) {
     char* buffer;
     int buffSize;

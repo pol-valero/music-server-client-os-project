@@ -1,7 +1,8 @@
 #include "bowmanCmdProcessing.h"
 #include "globals.h"
 
-
+// Check if the given string has a ".mp3" extension.
+// Returns 1 if true (has ".mp3" extension), 0 otherwise.
 int hasMp3Extension(char* str) {
     
     int i = 0;
@@ -33,11 +34,13 @@ int hasMp3Extension(char* str) {
 
 }
 
+// Check the first command word and convert it to an integer.
 int validFirstCommandWord(char* command1) {
     return ((strcasecmp("CONNECT", command1) && strcasecmp("LOGOUT", command1) && strcasecmp("LIST", command1) 
             && strcasecmp("DOWNLOAD", command1) && strcasecmp("CHECK", command1) && strcasecmp("CLEAR", command1)) == 0);
 }
 
+// Count the number of words in the command.
 int wordsNum(char* str) {
 
     int words_num = 0;
@@ -70,6 +73,7 @@ int wordsNum(char* str) {
     return words_num;
 }
 
+// Read the first word in the command.
 char* readFirstCommandWord(char* command) {
   
     char* command1;
@@ -100,6 +104,7 @@ char* readFirstCommandWord(char* command) {
     return command1;
 }
 
+// Read the second word in a two-word command.
 char* readSecondCommandWord(char* command) {
 
     char* command2;
@@ -141,7 +146,7 @@ char* readSecondCommandWord(char* command) {
     
 }
 
-
+// Process a single-word command.
 int processSingleWordCmd(char* command1) {
 
     int command_case_num;
@@ -162,6 +167,7 @@ int processSingleWordCmd(char* command1) {
 
 }
 
+// Process a two-word command.
 int processDoubleWordCmd(char* command1, char* command2) {
 
     int command_case_num;
@@ -196,6 +202,7 @@ int processDoubleWordCmd(char* command1, char* command2) {
 
 }
 
+// Function to convert a command (cmd) to an integer.
 int commandToCmdCaseNum(char* command) {
 
     int command_case_num = NO_CMD;

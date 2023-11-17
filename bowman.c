@@ -2,9 +2,9 @@
 #include "bowmanConfig.h"
 #include "bowmanCmdProcessing.h"
 
-PointersToFree pointers_list = {.numPointers = 0};
-
 int fd_config;
+
+ClientConfig client_config; //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
 
 // Function to manage user-input commands.
 void enterCommandMode() {
@@ -80,15 +80,9 @@ void terminateExecution () {
 
     char* currentInputPointer = getGlobalsCurrentInputPointer();
 
-    for (int i = 0; i < pointers_list.numPointers; i++) {
-        if (pointers_list.pointers[i] != NULL) {
-            free(pointers_list.pointers[i]);
-        }
-    }
-
-    if (pointers_list.pointers != NULL) {
-        free(pointers_list.pointers);
-    }
+    free(client_config.name);
+    free(client_config.files_folder);
+    free(client_config.ip);
 
     if (currentInputPointer != NULL) {
         free(currentInputPointer);
@@ -103,8 +97,6 @@ void terminateExecution () {
 
 //main function :P
 int main (int argc, char** argv) {
-
-    ClientConfig client_config;
 
     signal(SIGINT, terminateExecution);
     signal(SIGTERM, terminateExecution);
@@ -127,9 +119,7 @@ int main (int argc, char** argv) {
         client_config = readConfigFile(fd_config);
     }
 
-    addPointerToList(client_config.files_folder, &pointers_list);
-    addPointerToList(client_config.ip, &pointers_list);
-    addPointerToList(client_config.name, &pointers_list);
+    
 
     printConfigFile(client_config);
 

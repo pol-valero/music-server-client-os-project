@@ -1,23 +1,18 @@
 #include "globals.h"
 #include "pooleConfig.h"
 
-PointersToFree pointers_list = {.numPointers = 0};
-
 int fd_config;
+
+ServerConfig server_config; //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
 
 // Handle unexpected termination scenarios.
 void terminateExecution () {
     char* currentInputPointer = getGlobalsCurrentInputPointer();
 
-    for (int i = 0; i < pointers_list.numPointers; i++) {
-        if (pointers_list.pointers[i] != NULL) {
-            free(pointers_list.pointers[i]);
-        }
-    }
-
-    if (pointers_list.pointers != NULL) {
-        free(pointers_list.pointers);
-    }
+    free(server_config.name);
+    free(server_config.files_folder);
+    free(server_config.ip_discovery);
+    free(server_config.ip_poole);
 
     if (currentInputPointer != NULL) {
         free(currentInputPointer);
@@ -31,7 +26,6 @@ void terminateExecution () {
 
 //main function :p
 int main (int argc, char** argv) {
-    ServerConfig server_config;
 
     signal(SIGINT, terminateExecution);
     signal(SIGTERM, terminateExecution);
@@ -52,11 +46,6 @@ int main (int argc, char** argv) {
     }
 
     server_config = readConfigFile(fd_config);
-
-    addPointerToList(server_config.name, &pointers_list);
-    addPointerToList(server_config.files_folder, &pointers_list);
-    addPointerToList(server_config.ip_discovery, &pointers_list);
-    addPointerToList(server_config.ip_poole, &pointers_list);
 
     printConfigFile(server_config);
     

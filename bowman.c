@@ -6,7 +6,7 @@ PointersToFree pointers_list = {.numPointers = 0};
 
 int fd_config;
 
-
+// Function to manage user-input commands.
 void enterCommandMode() {
 
     char* command;
@@ -19,7 +19,6 @@ void enterCommandMode() {
         command = readUntilChar(STDIN_FILENO, '\n');
         command_case_num = commandToCmdCaseNum(command);
         free(command);
-
 
         switch (command_case_num) {
             case CONNECT_CMD:
@@ -62,7 +61,7 @@ void enterCommandMode() {
                 break;
             case INVALID_CMD:
                 printx("Comanda KO\n");
-                //printx("INVALID_CMD\n");
+                //printEr("INVALID_CMD\n");
                 //Not valid command
                 break;
             case NO_CMD:
@@ -76,7 +75,7 @@ void enterCommandMode() {
 
 }
 
-
+// Handle unexpected termination scenarios.
 void terminateExecution () {
 
     char* currentInputPointer = getGlobalsCurrentInputPointer();
@@ -102,6 +101,7 @@ void terminateExecution () {
 
 }
 
+//main function :P
 int main (int argc, char** argv) {
 
     ClientConfig client_config;
@@ -111,14 +111,17 @@ int main (int argc, char** argv) {
 
 
     if (argc < 2) {
-        printx("\nERROR: You must enter a the configuration file name as a parameter\n");
+        printEr("\nERROR: You must enter a the configuration file name as a parameter\n");
+        return 0;
+    } else if(argc > 2){
+        printEr("\nERROR: More arguments than needed.\n");
         return 0;
     }
 
     fd_config = open(argv[1], O_RDONLY);
 
     if (fd_config < 0) {
-        printx("\nERROR: Cannot open the file. Filename may be incorrect\n");
+        printEr("\nERROR: Cannot open the file. Filename may be incorrect\n");
         return 0;
     } else {
         client_config = readConfigFile(fd_config);
@@ -127,8 +130,6 @@ int main (int argc, char** argv) {
     addPointerToList(client_config.files_folder, &pointers_list);
     addPointerToList(client_config.ip, &pointers_list);
     addPointerToList(client_config.name, &pointers_list);
-
-    printInitMsg(client_config.name);
 
     printConfigFile(client_config);
 

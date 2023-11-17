@@ -13,6 +13,4 @@ ClientConfig readConfigFile(int fd_config);
 
 void printConfigFile(ClientConfig client_config);
 
-void printInitMsg(char* username);
-
 #endif

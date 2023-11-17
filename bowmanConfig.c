@@ -1,12 +1,13 @@
 #include "bowmanConfig.h"
 #include "globals.h"
 
+// Read the configuration file and return the clientConfig struct with all fields filled.
 ClientConfig readConfigFile(int fd_config) {
 
     ClientConfig client_config;
     char* port;
 
-    client_config.name = readUntilChar(fd_config, '\n');
+    client_config.name = readUntilCharExceptLetter(fd_config, '\n', '&');
     client_config.files_folder = readUntilChar(fd_config, '\n');
     client_config.ip = readUntilChar(fd_config, '\n');
 
@@ -17,11 +18,14 @@ ClientConfig readConfigFile(int fd_config) {
     return client_config;
 }
 
-
+// Print the received configuration.
 void printConfigFile(ClientConfig client_config) {
-    
     char* buffer;
     int buffSize;
+
+    buffSize = asprintf(&buffer, "\n%s user initialized\n", client_config.name);
+    printDynStr(buffer, buffSize);
+    free(buffer);
 
     printx("\nFile read correctly:\n");
     buffSize = asprintf(&buffer, "User - %s\n", client_config.name);
@@ -36,26 +40,4 @@ void printConfigFile(ClientConfig client_config) {
     buffSize = asprintf(&buffer, "Port - %d\n\n", client_config.port);
     printDynStr(buffer, buffSize);
     free(buffer);
-
-}
-
-void checkUsernameFormat(char* username) {
-    char* forbiddenChar;
-
-    while (strchr(username, '&') != NULL) {
-        forbiddenChar = strchr(username, '&');
-        *forbiddenChar = ' ';
-    }
-}
-
-void printInitMsg(char* username) {
-    char* buffer;
-    int bufferSize;
-
-    checkUsernameFormat(username);
-
-    bufferSize = asprintf(&buffer, "\n%s user initialized\n", username);
-    printDynStr(buffer, bufferSize);
-    free(buffer);
-
 }

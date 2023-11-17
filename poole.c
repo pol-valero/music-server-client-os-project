@@ -2,8 +2,12 @@
 #include "pooleConfig.h"
 
 int fd_config;
+int fd_client;
 
 ServerConfig server_config; //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
+
+int fd_socket;
+
 
 // Handle unexpected termination scenarios.
 void terminateExecution () {
@@ -48,6 +52,17 @@ int main (int argc, char** argv) {
     server_config = readConfigFile(fd_config);
 
     printConfigFile(server_config);
+
+    //TODO: REMOVE THESE LINES, THEY ARE JUST FOR TESTING
+    struct sockaddr_in c_addr;
+    socklen_t c_len = sizeof(c_addr);
+
+    fd_socket = start_server(server_config.port_poole, server_config.ip_poole);
+    fd_client = accept(fd_socket, (void *) &c_addr, &c_len);
+    char* msg = readUntilChar(fd_client, '\n');
+    printx(msg);
+    write(fd_client, "prova2\n", strlen("prova2\n"));
+    /////////
     
     terminateExecution();
 

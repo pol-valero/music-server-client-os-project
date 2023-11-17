@@ -23,45 +23,39 @@ void enterCommandMode() {
         switch (command_case_num) {
             case CONNECT_CMD:
                 printx("Comanda OK\n");
-                //printx("CONNECT_CMD\n");
+                int fd_socket = startServerConnection(client_config.ip, client_config.port);
+                write(fd_socket, "prova\n", strlen("prova\n")); //TODO: REMOVE THIS LINE
+                char* msg = readUntilChar(fd_socket, '\n'); //TODO: REMOVE THIS LINE
+                printx(msg); //TODO: REMOVE THIS LINE
                 break;
             case LOGOUT_CMD:
                 printx("Comanda OK\n");
-                //printx("LOGOUT_CMD\n");
                 exit_flag = 1;
                 break;
             case LIST_SONGS_CMD:
                 printx("Comanda OK\n");
-                //printx("LIST_SONGS_CMD\n");
                 break;
             case LIST_PLAYLISTS_CMD:
                 printx("Comanda OK\n");
-                //printx("LIST_PLAYLISTS_CMD\n");
                 break;
             case DOWNLOAD_SONG_CMD:
                 printx("Comanda OK\n");
-                //printx("DOWNLOAD_SONG_CMD\n");
                 break;
             case DOWNLOAD_PLAYLIST_CMD:
                 printx("Comanda OK\n");
-                //printx("DOWNLOAD_PLAYLIST_CMD\n");
                 break;
             case CHECK_DOWNLOADS_CMD:
                 printx("Comanda OK\n");
-                //printx("CHECK_DOWNLOADS_CMD\n");
                 break;
             case CLEAR_DOWNLOADS_CMD:
                 printx("Comanda OK\n");
-                //printx("CLEAR_DOWNLOADS_CMD\n");
                 break;
             case PARTIALLY_CORRECT_CMD:
                 printx("Comanda KO\n");
-                //printx("PARTIALLY_CORRECT_CMD\n");
                 //Unknown command
                 break;
             case INVALID_CMD:
                 printx("Comanda KO\n");
-                //printEr("INVALID_CMD\n");
                 //Not valid command
                 break;
             case NO_CMD:

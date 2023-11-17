@@ -23,6 +23,10 @@
 #define printx(x) write(1, x, strlen(x))
 #define printEr(x) write(1, ANSI_COLOR_RED x ANSI_COLOR_RESET, strlen(ANSI_COLOR_RED x ANSI_COLOR_RESET))
 
+int start_server(int port, char *ip);
+
+int startServerConnection(char* ip, int port);
+
 char* readUntilEitherChar(int fd, char endChar, char endChar2, int* endChar2Found);
 
 char* readUntilChar(int fd, char endChar);

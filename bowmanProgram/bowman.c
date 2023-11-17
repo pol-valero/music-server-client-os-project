@@ -1,4 +1,4 @@
-#include "globals.h"
+#include "../globals.h"
 #include "bowmanConfig.h"
 #include "bowmanCmdProcessing.h"
 
@@ -8,7 +8,6 @@ ClientConfig client_config; //This variable has to be global in order to be free
 
 // Function to manage user-input commands.
 void enterCommandMode() {
-
     char* command;
     int command_case_num;
     int exit_flag = 0;
@@ -112,8 +111,6 @@ int main (int argc, char** argv) {
     } else {
         client_config = readConfigFile(fd_config);
     }
-
-    
 
     printConfigFile(client_config);
 

@@ -1,6 +1,8 @@
 #ifndef _POOLE_CONFIG_H_
 #define _POOLE_CONFIG_H_
 
+#include "../globals.h"
+
 typedef struct {
     char* name;
     char* files_folder;

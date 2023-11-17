@@ -1,4 +1,4 @@
-#include "globals.h"
+#include "../globals.h"
 #include "pooleConfig.h"
 
 int fd_config;

@@ -1,6 +1,8 @@
 #ifndef _BOWMAN_CMD_PROCESSING_H_
 #define _BOWMAN_CMD_PROCESSING_H_
 
+#include "../globals.h"
+
 #define CONNECT_CMD 1
 #define LOGOUT_CMD 2
 #define LIST_SONGS_CMD 3

@@ -1,5 +1,4 @@
 #include "bowmanCmdProcessing.h"
-#include "globals.h"
 
 // Check if the given string has a ".mp3" extension.
 // Returns 1 if true (has ".mp3" extension), 0 otherwise.

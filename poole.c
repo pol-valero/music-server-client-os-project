@@ -55,8 +55,8 @@ int main (int argc, char** argv) {
 
     addPointerToList(server_config.name, &pointers_list);
     addPointerToList(server_config.files_folder, &pointers_list);
-    addPointerToList(server_config.ip, &pointers_list);
-    addPointerToList(server_config.ip_server, &pointers_list);
+    addPointerToList(server_config.ip_discovery, &pointers_list);
+    addPointerToList(server_config.ip_poole, &pointers_list);
 
     printConfigFile(server_config);
     

@@ -11,15 +11,15 @@ ServerConfig readConfigFile(int fd_config) {
 
     server_config.files_folder = readUntilChar(fd_config, '\n');
 
-    server_config.ip = readUntilChar(fd_config, '\n');
+    server_config.ip_discovery = readUntilChar(fd_config, '\n');
 
     port = readUntilChar(fd_config, '\n');
-    server_config.port = atoi(port);   
+    server_config.port_discovery = atoi(port);   
     free(port);
 
-    server_config.ip_server = readUntilChar(fd_config, '\n');
+    server_config.ip_poole = readUntilChar(fd_config, '\n');
     port = readUntilChar(fd_config, ' ');   //Does not matter which end character we send
-    server_config.port_server = atoi(port);   
+    server_config.port_poole = atoi(port);   
     free(port);
 
     return server_config;
@@ -44,19 +44,19 @@ void printConfigFile(ServerConfig server_config) {
     printDynStr(buffer, buffSize);
     free(buffer);
 
-    buffSize = asprintf(&buffer, "IP - %s\n", server_config.ip);
+    buffSize = asprintf(&buffer, "IP Discovery - %s\n", server_config.ip_discovery);
     printDynStr(buffer, buffSize);
     free(buffer);
 
-    buffSize = asprintf(&buffer, "Port - %d\n", server_config.port);
+    buffSize = asprintf(&buffer, "Port Discovery - %d\n", server_config.port_discovery);
     printDynStr(buffer, buffSize);
     free(buffer);
 
-    buffSize = asprintf(&buffer, "IP Server - %s\n", server_config.ip_server);
+    buffSize = asprintf(&buffer, "IP Poole - %s\n", server_config.ip_poole);
     printDynStr(buffer, buffSize);
     free(buffer);
     
-    buffSize = asprintf(&buffer, "Port Server - %d\n", server_config.port_server);
+    buffSize = asprintf(&buffer, "Port Poole - %d\n", server_config.port_poole);
     printDynStr(buffer, buffSize);
     free(buffer);
 }

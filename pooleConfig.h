@@ -4,10 +4,10 @@
 typedef struct {
     char* name;
     char* files_folder;
-    char* ip;
-    int port;
-    char* ip_server;
-    int port_server;
+    char* ip_discovery;
+    int port_discovery;
+    char* ip_poole;
+    int port_poole;
 } ServerConfig;
 
 ServerConfig readConfigFile(int fd_config);

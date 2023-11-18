@@ -50,9 +50,20 @@ int main (int argc, char** argv) {
 
     fd_socket = startServer(discovery_config.port_bowman, discovery_config.ip_bowman);
     fd_client = accept(fd_socket, (void *) &c_addr, &c_len);
-    char* msg = readUntilChar(fd_client, '\n');
-    printx(msg);
-    write(fd_client, "prova2\n", strlen("prova2\n"));
+    //char* msg = readUntilChar(fd_client, '\n');
+    char* buffer = malloc(sizeof(char) * 256);
+    read(fd_client, buffer, 256);
+    //printx(msg);
+
+    //write(1, buffer, 256);
+    Frame frame = deserializeFrame(buffer);
+
+        char buffer2[100];
+        sprintf(buffer2, "%d %d %s %s", frame.type, frame.header_length, frame.header, frame.data);
+        printx(buffer2);
+
+
+    //write(fd_client, "prova2\n", strlen("prova2\n"));
     /////////
     
     terminateExecution();

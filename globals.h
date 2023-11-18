@@ -23,6 +23,21 @@
 #define printx(x) write(1, x, strlen(x))
 #define printEr(x) write(1, ANSI_COLOR_RED x ANSI_COLOR_RESET, strlen(ANSI_COLOR_RED x ANSI_COLOR_RESET))
 
+typedef struct {
+    uint8_t type;                 //Frame type (1 byte)
+    uint16_t header_length;    //Frame header length (2 bytes)
+    char* header;              //Frame header (X bytes)
+    char* data;            //Data (256 - 3 - X bytes)
+} Frame;
+
+Frame createFrame(uint8_t type, char* header, char* data);
+
+char* serializeFrame(Frame frame);
+
+Frame deserializeFrame(char* buffer);
+
+int frameIsValid(Frame frame);
+
 int startServer(int port, char *ip);
 
 int startServerConnection(char* ip, int port);

@@ -1,5 +1,91 @@
 #include "globals.h"
 
+Frame createFrame(uint8_t type, char* header, char* data) {
+    
+    Frame frame;
+
+    uint16_t header_length = strlen(header) + 1;    //We add 1 to the length to include the '\0' character
+    uint16_t data_length = strlen(data) + 1;
+    uint16_t data_field_length = 256 - 3 - header_length;
+
+    frame.type = type;
+    frame.header_length = header_length;
+
+    frame.header = malloc(sizeof(char) * header_length);
+    strcpy(frame.header, header);
+
+    if (data_length == data_field_length) {
+        frame.data = malloc(sizeof(char) * data_field_length);
+        strcpy(frame.data, data);  //If the data has exactly the size of the data field, we can just point to it.
+    } else {
+        
+        char* allocatedData;
+
+        allocatedData = malloc(sizeof(char) * data_field_length); //If the data is smaller than the data field, we need request more memory and add padding.
+
+        strcpy(allocatedData, data); //We copy the data to the allocated memory
+        memset(allocatedData + data_length, '\0', data_field_length - data_length); //We add '\0' as a padding to the data field.
+        //allocatedData + data_length = starting position of the padding
+        //data_field_length - data_length = number of '\0' padding to add
+
+        frame.data = allocatedData;
+    }
+
+    return frame;
+}
+
+char* serializeFrame(Frame frame) {
+
+    char* buffer = malloc(sizeof(char) * 256);      //256 bytes is the fixed size of a frame
+
+    int offset = 0;
+
+    memcpy(buffer, &frame.type, sizeof(frame.type));
+    offset += sizeof(frame.type);
+
+    memcpy(buffer + offset, &frame.header_length, sizeof(frame.header_length));
+    offset += sizeof(frame.header_length);
+
+    memcpy(buffer + offset, frame.header, frame.header_length);
+    offset += frame.header_length;
+
+    memcpy(buffer + offset, frame.data, 256 - 3 - frame.header_length);
+
+    return buffer;
+}
+
+Frame deserializeFrame(char* buffer) {
+    Frame frame;
+
+    int offset = 0;
+
+    memcpy(&frame.type, buffer, sizeof(frame.type));
+    offset += sizeof(frame.type);
+
+    memcpy(&frame.header_length, buffer + offset, sizeof(frame.header_length));
+    offset += sizeof(frame.header_length);
+
+    frame.header = malloc(sizeof(char) * frame.header_length);
+    memcpy(frame.header, buffer + offset, frame.header_length);
+    offset += frame.header_length;
+
+    frame.data = malloc(sizeof(char) * (256 - 3 - frame.header_length));
+    memcpy(frame.data, buffer + offset, 256 - 3 - frame.header_length);
+
+    return frame;
+}
+
+int frameIsValid(Frame frame) {
+    if (frame.type < 0x01 || frame.type > 0x07) {
+        return 0;
+    }
+
+    if (frame.header_length != sizeof(frame.header)) {
+        return 0;
+    }
+
+    return 1;
+}
 
 int startServer(int port, char *ip) {
     int fd_socket;

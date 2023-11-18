@@ -23,9 +23,12 @@ void enterCommandMode() {
             case CONNECT_CMD:
                 printx("Comanda OK\n");
                 int fd_socket = startServerConnection(client_config.ip_discovery, client_config.port_discovery);
-                write(fd_socket, "prova\n", strlen("prova\n")); //TODO: REMOVE THIS LINE
-                char* msg = readUntilChar(fd_socket, '\n'); //TODO: REMOVE THIS LINE
-                printx(msg); //TODO: REMOVE THIS LINE
+                //write(fd_socket, "prova\n", strlen("prova\n")); //TODO: REMOVE THIS LINE
+                //char* msg = readUntilChar(fd_socket, '\n'); //TODO: REMOVE THIS LINE
+                //printx(msg); //TODO: REMOVE THIS LINE
+                Frame frame = createFrame(0x01, "myHeader", "myData");
+                char* buffer = serializeFrame(frame);
+                write(fd_socket, buffer, 256);
                 break;
             case LOGOUT_CMD:
                 printx("Comanda OK\n");

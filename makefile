@@ -1,4 +1,4 @@
-all: bowman poole
+all: bowman poole discovery
 
 bowmanCmdProcessing.o: bowmanProgram/bowmanCmdProcessing.c bowmanProgram/bowmanCmdProcessing.h globals.h
 	gcc -c bowmanProgram/bowmanCmdProcessing.c -Wall -Wextra
@@ -24,8 +24,18 @@ poole.o: pooleProgram/poole.c globals.h pooleProgram/pooleConfig.h
 poole: poole.o globals.o pooleConfig.o
 	gcc poole.o globals.o pooleConfig.o -o poole -Wall -Wextra
 
+discoveryConfig.o: discoveryProgram/discoveryConfig.c discoveryProgram/discoveryConfig.h globals.h
+	gcc -c discoveryProgram/discoveryConfig.c -Wall -Wextra
+
+discovery.o: discoveryProgram/discovery.c globals.h discoveryProgram/discoveryConfig.h
+	gcc -c discoveryProgram/discovery.c -Wall -Wextra
+
+discovery: discovery.o globals.o discoveryConfig.o
+	gcc discovery.o globals.o discoveryConfig.o -o discovery -Wall -Wextra
+
 .PHONY: clean
 clean:
 	rm *.o
 	rm bowman
 	rm poole
+	rm discovery

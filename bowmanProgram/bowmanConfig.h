@@ -6,8 +6,8 @@
 typedef struct {
     char* name;
     char* files_folder;
-    char* ip;
-    int port;
+    char* ip_discovery;
+    int port_discovery;
 } ClientConfig;
 
 ClientConfig readConfigFile(int fd_config);

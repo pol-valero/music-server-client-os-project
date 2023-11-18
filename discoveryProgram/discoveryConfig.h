@@ -4,14 +4,14 @@
 #include "../globals.h"
 
 typedef struct {
-    char* name;
-    char* files_folder;
     char* ip_poole;
     int port_poole;
-    char* ip_bowlman;
-    int port_bowlman;
+    char* ip_bowman;
+    int port_bowman;
 } DiscoveryConfig;
 
-ServerConfig readConfigFile(int fd_config);
+DiscoveryConfig readConfigFile(int fd_config);
+
+void printConfigFile(DiscoveryConfig server_config);
 
 #endif

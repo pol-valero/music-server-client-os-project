@@ -22,7 +22,7 @@ void enterCommandMode() {
         switch (command_case_num) {
             case CONNECT_CMD:
                 printx("Comanda OK\n");
-                int fd_socket = startServerConnection(client_config.ip, client_config.port);
+                int fd_socket = startServerConnection(client_config.ip_discovery, client_config.port_discovery);
                 write(fd_socket, "prova\n", strlen("prova\n")); //TODO: REMOVE THIS LINE
                 char* msg = readUntilChar(fd_socket, '\n'); //TODO: REMOVE THIS LINE
                 printx(msg); //TODO: REMOVE THIS LINE
@@ -75,7 +75,7 @@ void terminateExecution () {
 
     free(client_config.name);
     free(client_config.files_folder);
-    free(client_config.ip);
+    free(client_config.ip_discovery);
 
     if (currentInputPointer != NULL) {
         free(currentInputPointer);

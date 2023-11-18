@@ -8,10 +8,10 @@ ClientConfig readConfigFile(int fd_config) {
 
     client_config.name = readUntilCharExceptLetter(fd_config, '\n', '&');
     client_config.files_folder = readUntilChar(fd_config, '\n');
-    client_config.ip = readUntilChar(fd_config, '\n');
+    client_config.ip_discovery = readUntilChar(fd_config, '\n');
 
     port = readUntilChar(fd_config, ' ');   //Does not matter which end character we send
-    client_config.port = atoi(port);   
+    client_config.port_discovery = atoi(port);   
     free(port);
 
     return client_config;
@@ -33,10 +33,10 @@ void printConfigFile(ClientConfig client_config) {
     buffSize = asprintf(&buffer, "Directory - %s\n", client_config.files_folder);
     printDynStr(buffer, buffSize);
     free(buffer);
-    buffSize = asprintf(&buffer, "IP - %s\n", client_config.ip);
+    buffSize = asprintf(&buffer, "IP - %s\n", client_config.ip_discovery);
     printDynStr(buffer, buffSize);
     free(buffer);
-    buffSize = asprintf(&buffer, "Port - %d\n\n", client_config.port);
+    buffSize = asprintf(&buffer, "Port - %d\n\n", client_config.port_discovery);
     printDynStr(buffer, buffSize);
     free(buffer);
 }

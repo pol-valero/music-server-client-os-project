@@ -11,16 +11,11 @@ int fd_socket;
 
 // Handle unexpected termination scenarios.
 void terminateExecution () {
-    char* currentInputPointer = getGlobalsCurrentInputPointer();
 
     free(server_config.name);
     free(server_config.files_folder);
     free(server_config.ip_discovery);
     free(server_config.ip_poole);
-
-    if (currentInputPointer != NULL) {
-        free(currentInputPointer);
-    }
 
     close (fd_config);
 
@@ -57,7 +52,7 @@ int main (int argc, char** argv) {
     struct sockaddr_in c_addr;
     socklen_t c_len = sizeof(c_addr);
 
-    fd_socket = start_server(server_config.port_poole, server_config.ip_poole);
+    fd_socket = startServer(server_config.port_poole, server_config.ip_poole);
     fd_client = accept(fd_socket, (void *) &c_addr, &c_len);
     char* msg = readUntilChar(fd_client, '\n');
     printx(msg);

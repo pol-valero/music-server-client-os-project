@@ -48,7 +48,7 @@ int main (int argc, char** argv) {
     struct sockaddr_in c_addr;
     socklen_t c_len = sizeof(c_addr);
 
-    fd_socket = start_server(discovery_config.port_bowman, discovery_config.ip_bowman);
+    fd_socket = startServer(discovery_config.port_bowman, discovery_config.ip_bowman);
     fd_client = accept(fd_socket, (void *) &c_addr, &c_len);
     char* msg = readUntilChar(fd_client, '\n');
     printx(msg);

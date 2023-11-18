@@ -71,15 +71,10 @@ void enterCommandMode() {
 // Handle unexpected termination scenarios.
 void terminateExecution () {
 
-    char* currentInputPointer = getGlobalsCurrentInputPointer();
 
     free(client_config.name);
     free(client_config.files_folder);
     free(client_config.ip_discovery);
-
-    if (currentInputPointer != NULL) {
-        free(currentInputPointer);
-    }
 
     close (fd_config);
 

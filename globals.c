@@ -1,13 +1,7 @@
 #include "globals.h"
 
-char* currentInputPointer;  //We will free this pointer if the program is interrupted by a SIGNAL
 
-//Returns the current input pointer, in order to be freed if the program is interrupted by a SIGNAL
-char* getGlobalsCurrentInputPointer() {
-    return currentInputPointer;
-}
-
-int start_server(int port, char *ip) {
+int startServer(int port, char *ip) {
     int fd_socket;
 
     struct sockaddr_in socket_addr;
@@ -27,7 +21,7 @@ int start_server(int port, char *ip) {
     socket_addr.sin_family = AF_INET;
     socket_addr.sin_addr.s_addr = inet_addr(ip); //We convert IP string to a proper address for the in_addr structure
 
-    if (bind (fd_socket, (void *) &socket_addr, sizeof (socket_addr)) < 0) {
+    if (bind (fd_socket, (void *)&socket_addr, sizeof(socket_addr)) < 0) {
         printx("ERROR binding port\n");
 
         close(fd_socket);
@@ -43,8 +37,7 @@ int start_server(int port, char *ip) {
 
 int startServerConnection(char* ip, int port) {
 
-    char buffer[100]; //TODO: Make dynamic memory buffer
-    int buffer_bytes;
+    char* buffer; 
 
     struct sockaddr_in socket_addr;
     int socket_conn = -1;
@@ -63,9 +56,10 @@ int startServerConnection(char* ip, int port) {
 
         if (connect(socket_conn, (void *) &socket_addr, sizeof(socket_addr)) < 0) {
             
-            buffer_bytes = sprintf(buffer, "Connection error with the server: %s", strerror(errno));
-            write(1, buffer, buffer_bytes);
+            asprintf(&buffer, "Connection error with the server: %s", strerror(errno));
+            printx(buffer);
             close(socket_conn);
+            free(buffer);
 
             return -1;
         }
@@ -115,7 +109,6 @@ char* readUntilChar(int fd, char endChar) {
 
     char* string = malloc(sizeof(char));
 
-    currentInputPointer = string;
     while (1) {
         size = read(fd, &c, sizeof(char));
         
@@ -123,14 +116,12 @@ char* readUntilChar(int fd, char endChar) {
             string = realloc(string, sizeof(char) * (i + 2));
             string[i++] = c;
 
-            currentInputPointer = string;
         } else {
             break;
         }
     }
     string[i] = '\0';
 
-    currentInputPointer = NULL; //If we can return the string because no SIGNALs have interrupted the program, we set the pointer to NULL so it is not freed (we will free the string)
     return string;
 }
 
@@ -142,7 +133,6 @@ char* readUntilCharExceptLetter(int fd, char endChar, char exception) {
 
     char* string = malloc(sizeof(char));
 
-    currentInputPointer = string;
     while (1) {
         size = read(fd, &c, sizeof(char));
         
@@ -151,7 +141,6 @@ char* readUntilCharExceptLetter(int fd, char endChar, char exception) {
                 string = realloc(string, sizeof(char) * (i + 2));
                 string[i++] = c;
 
-                currentInputPointer = string;
             }
         } else {
             break;
@@ -159,7 +148,6 @@ char* readUntilCharExceptLetter(int fd, char endChar, char exception) {
     }
     string[i] = '\0';
 
-    currentInputPointer = NULL; //If we can return the string because no SIGNALs have interrupted the program, we set the pointer to NULL so it is not freed (we will free the string)
     return string;
 }
 

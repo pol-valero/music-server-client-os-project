@@ -1,5 +1,25 @@
 #include "globals.h"
 
+void sendFrame (uint8_t type, char* header, char* data, int fd_socket) {
+
+    Frame frame = createFrame(type, header, data);
+    char* buffer = serializeFrame(frame);
+    write(fd_socket, buffer, 256);
+    free(buffer);
+    free(frame.header);
+    free(frame.data);
+}
+
+Frame receiveFrame (int fd_socket) {
+
+    char* buffer = malloc(sizeof(char) * 256);
+    read(fd_socket, buffer, 256);
+    Frame frame = deserializeFrame(buffer);
+    free(buffer);
+
+    return frame;
+}
+
 Frame createFrame(uint8_t type, char* header, char* data) {
     
     Frame frame;

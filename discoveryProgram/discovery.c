@@ -4,6 +4,8 @@
 int fd_config;
 int fd_client;
 int fd_socket;
+//int fd_bowman;
+//int fd_poole;
 
 DiscoveryConfig discovery_config; //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
 
@@ -50,20 +52,16 @@ int main (int argc, char** argv) {
 
     fd_socket = startServer(discovery_config.port_bowman, discovery_config.ip_bowman);
     fd_client = accept(fd_socket, (void *) &c_addr, &c_len);
-    //char* msg = readUntilChar(fd_client, '\n');
-    char* buffer = malloc(sizeof(char) * 256);
-    read(fd_client, buffer, 256);
-    //printx(msg);
+ 
+    Frame frame = receiveFrame(fd_client);
 
-    //write(1, buffer, 256);
-    Frame frame = deserializeFrame(buffer);
+    char buffer2[100];
+    sprintf(buffer2, "%d %d %s %s", frame.type, frame.header_length, frame.header, frame.data);
+    printx(buffer2);
 
-        char buffer2[100];
-        sprintf(buffer2, "%d %d %s %s", frame.type, frame.header_length, frame.header, frame.data);
-        printx(buffer2);
+    free(frame.header);
+    free(frame.data);
 
-
-    //write(fd_client, "prova2\n", strlen("prova2\n"));
     /////////
     
     terminateExecution();

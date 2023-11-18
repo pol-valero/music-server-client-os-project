@@ -54,9 +54,10 @@ int main (int argc, char** argv) {
 
     fd_socket = startServer(server_config.port_poole, server_config.ip_poole);
     fd_client = accept(fd_socket, (void *) &c_addr, &c_len);
-    char* msg = readUntilChar(fd_client, '\n');
-    printx(msg);
-    write(fd_client, "prova2\n", strlen("prova2\n"));
+
+    //TODO: Do a while loop that continuosuly listents for new connections and handles them depending on the port?
+    //We can distinguish ports if we look at c_addr.sin_port
+    //Maybe we can do it without a thread? Just a while loop that listens for new connections and handles them (the handling is really fast)
     /////////
     
     terminateExecution();

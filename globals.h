@@ -30,6 +30,10 @@ typedef struct {
     char* data;            //Data (256 - 3 - X bytes)
 } Frame;
 
+void sendFrame (uint8_t type, char* header, char* data, int fd_socket);
+
+Frame receiveFrame (int fd_socket);
+
 Frame createFrame(uint8_t type, char* header, char* data);
 
 char* serializeFrame(Frame frame);

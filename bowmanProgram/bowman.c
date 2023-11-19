@@ -23,7 +23,12 @@ void enterCommandMode() {
             case CONNECT_CMD:
                 printx("Comanda OK\n");
                 int fd_socket = startServerConnection(client_config.ip_discovery, client_config.port_discovery);
-                sendFrame(0x01, "myHeader", "myData", fd_socket);
+                sendFrame(0x01, "NEW_BOWMAN", client_config.name, fd_socket);
+                
+                Frame responseFrame = receiveFrame(fd_socket);
+                char buffer2[100];
+                sprintf(buffer2, "%d %d %s %s", responseFrame.type, responseFrame.header_length, responseFrame.header, responseFrame.data);
+                printx(buffer2);
                 break;
             case LOGOUT_CMD:
                 printx("Comanda OK\n");

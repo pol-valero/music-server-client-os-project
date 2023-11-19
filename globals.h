@@ -15,6 +15,10 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <pthread.h>
+
+#define OK 1
+#define KO 0
 
 // ANSI escape codes for text formatting
 #define ANSI_COLOR_RED     "\x1b[31m"

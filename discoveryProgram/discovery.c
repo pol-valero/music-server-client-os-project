@@ -2,12 +2,87 @@
 #include "discoveryConfig.h"
 
 int fd_config;
-int fd_client;
-int fd_socket;
-//int fd_bowman;
-//int fd_poole;
 
 DiscoveryConfig discovery_config; //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
+
+void* listenForPooleConnections(/*void* arg*/) {
+    //Thread 1
+    int fd_client;
+    int fd_socket_poole;
+
+    struct sockaddr_in c_addr;
+    socklen_t c_len = sizeof(c_addr);
+
+    fd_socket_poole = startServer(discovery_config.port_poole, discovery_config.ip_poole);
+
+    fd_client = accept(fd_socket_poole, (void *) &c_addr, &c_len);
+
+    while (1) {
+
+        Frame frame = receiveFrame(fd_client);
+
+        char buffer2[100];
+        sprintf(buffer2, "%d %d %s %s", frame.type, frame.header_length, frame.header, frame.data);
+        printx(buffer2);
+
+        if (frameIsValid(frame)) {
+            sendFrame(0x01, "CON_OK", "", fd_client);
+        } else {
+            sendFrame(0x01, "CON_KO", "", fd_client);
+        }
+
+        free(frame.header);
+        free(frame.data);
+    }
+
+}
+
+void* listenForBowmanConnections(/*void* arg*/) {
+    //Thread2
+    int fd_client;
+    int fd_socket_bowman;
+
+    struct sockaddr_in c_addr;
+    socklen_t c_len = sizeof(c_addr);
+
+    fd_socket_bowman = startServer(discovery_config.port_bowman, discovery_config.ip_bowman);
+
+    fd_client = accept(fd_socket_bowman, (void *) &c_addr, &c_len);
+
+    while (1) {
+
+        Frame frame = receiveFrame(fd_client);
+
+        char buffer2[100];
+        sprintf(buffer2, "%d %d %s %s", frame.type, frame.header_length, frame.header, frame.data);
+        printx(buffer2);
+
+        if (frameIsValid(frame)) {
+            sendFrame(0x01, "CON_OK", "", fd_client);
+        } else {
+            sendFrame(0x01, "CON_KO", "", fd_client);
+        }
+
+        free(frame.header);
+        free(frame.data);
+    }
+
+}
+
+void listenForConnections() {
+
+    pthread_t thread_poole;
+    pthread_t thread_bowman;
+
+    pthread_create(&thread_poole, NULL, (void *) listenForPooleConnections, NULL);
+    pthread_create(&thread_bowman, NULL, (void *) listenForBowmanConnections, NULL);
+
+    pthread_join(thread_poole, NULL);
+    pthread_join(thread_bowman, NULL);
+
+    //TODO: Close file descriptors inside threads 
+    
+}
 
 // Handle unexpected termination scenarios.
 void terminateExecution () {
@@ -46,23 +121,7 @@ int main (int argc, char** argv) {
 
     printConfigFile(discovery_config);
 
-    //TODO: REMOVE THESE LINES, THEY ARE JUST FOR TESTING
-    struct sockaddr_in c_addr;
-    socklen_t c_len = sizeof(c_addr);
-
-    fd_socket = startServer(discovery_config.port_bowman, discovery_config.ip_bowman);
-    fd_client = accept(fd_socket, (void *) &c_addr, &c_len);
- 
-    Frame frame = receiveFrame(fd_client);
-
-    char buffer2[100];
-    sprintf(buffer2, "%d %d %s %s", frame.type, frame.header_length, frame.header, frame.data);
-    printx(buffer2);
-
-    free(frame.header);
-    free(frame.data);
-
-    /////////
+    listenForConnections();
     
     terminateExecution();
 

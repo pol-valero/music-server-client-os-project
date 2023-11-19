@@ -22,7 +22,7 @@ poole.o: pooleProgram/poole.c globals.h pooleProgram/pooleConfig.h
 	gcc -c pooleProgram/poole.c -Wall -Wextra
 
 poole: poole.o globals.o pooleConfig.o
-	gcc poole.o globals.o pooleConfig.o -o poole -Wall -Wextra
+	gcc poole.o globals.o pooleConfig.o -o poole -Wall -Wextra -lpthread
 
 discoveryConfig.o: discoveryProgram/discoveryConfig.c discoveryProgram/discoveryConfig.h globals.h
 	gcc -c discoveryProgram/discoveryConfig.c -Wall -Wextra
@@ -31,7 +31,7 @@ discovery.o: discoveryProgram/discovery.c globals.h discoveryProgram/discoveryCo
 	gcc -c discoveryProgram/discovery.c -Wall -Wextra
 
 discovery: discovery.o globals.o discoveryConfig.o
-	gcc discovery.o globals.o discoveryConfig.o -o discovery -Wall -Wextra
+	gcc discovery.o globals.o discoveryConfig.o -o discovery -Wall -Wextra -lpthread
 
 .PHONY: clean
 clean:

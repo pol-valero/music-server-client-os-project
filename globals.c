@@ -100,7 +100,7 @@ int frameIsValid(Frame frame) {
         return 0;
     }
 
-    if (frame.header_length != sizeof(frame.header)) {
+    if (frame.header_length != strlen(frame.header) + 1) {
         return 0;
     }
 

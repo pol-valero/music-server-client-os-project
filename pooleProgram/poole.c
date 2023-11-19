@@ -8,6 +8,28 @@ ServerConfig server_config; //This variable has to be global in order to be free
 
 int fd_socket;
 
+void doDiscoveryHandshake() {
+
+    char* buffer;
+
+    int fd_socket = startServerConnection(server_config.ip_discovery, server_config.port_discovery);
+
+    if (fd_socket < 0) {
+        printEr("ERROR: Cannot connect to the discovery server\n");
+        return;
+    }
+
+    asprintf(&buffer, "%s&%s&%d", server_config.name, server_config.ip_poole, server_config.port_poole);
+
+    sendFrame(0x01, "NEW_POOLE", buffer, fd_socket);
+
+    Frame responseFrame = receiveFrame(fd_socket);
+
+    char buffer2[100];
+    sprintf(buffer2, "%d %d %s %s", responseFrame.type, responseFrame.header_length, responseFrame.header, responseFrame.data);
+    printx(buffer2);
+        
+}
 
 // Handle unexpected termination scenarios.
 void terminateExecution () {
@@ -48,6 +70,8 @@ int main (int argc, char** argv) {
 
     printConfigFile(server_config);
 
+    doDiscoveryHandshake();
+
     //TODO: REMOVE THESE LINES, THEY ARE JUST FOR TESTING
     struct sockaddr_in c_addr;
     socklen_t c_len = sizeof(c_addr);
@@ -55,9 +79,6 @@ int main (int argc, char** argv) {
     fd_socket = startServer(server_config.port_poole, server_config.ip_poole);
     fd_client = accept(fd_socket, (void *) &c_addr, &c_len);
 
-    //TODO: Do a while loop that continuosuly listents for new connections and handles them depending on the port?
-    //We can distinguish ports if we look at c_addr.sin_port
-    //Maybe we can do it without a thread? Just a while loop that listens for new connections and handles them (the handling is really fast)
     /////////
     
     terminateExecution();

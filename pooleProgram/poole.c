@@ -57,17 +57,49 @@ char** getFilesName(int *numFiles){
         return NULL;
     }
 
-    struct dirent *entrada;
+    struct dirent *input;
     char** filesList = NULL;
-
-    while ((entrada = readdir(dir)) != NULL) {
-        if (entrada->d_type != DT_DIR && strcmp(entrada->d_name, ".") != 0 && strcmp(entrada->d_name, "..") != 0) {
+    *numFiles = 0;
+    while ((input = readdir(dir)) != NULL) {
+        if (input->d_type == DT_REG) {
             filesList = realloc(filesList,sizeof(char*) * (*numFiles + 1));
             if (filesList == NULL) {
                 printEr("Error:Problemas con realloc");
                 return NULL;
             }
-            if (asprintf(&filesList[*numFiles], "%s", entrada->d_name) == -1) {
+            if (asprintf(&filesList[*numFiles], "%s", input->d_name) == -1) {
+                printEr("Error:Problemas con asprintf");
+                return NULL;
+            }
+            (*numFiles)++;
+        }
+    }
+
+    closedir(dir);
+
+    return filesList;
+}
+
+char** getFoldersName(int *numFiles){
+    // Abre el directorio
+    DIR* dir = opendir(PATH);
+
+    if (dir == NULL) {
+        return NULL;
+    }
+
+    struct dirent *input;
+    char** filesList = NULL;
+    *numFiles = 0;
+
+    while ((input = readdir(dir)) != NULL) {
+        if (input->d_type == DT_DIR && strcmp(input->d_name, ".") != 0 && strcmp(input->d_name, "..") != 0) {
+            filesList = realloc(filesList,sizeof(char*) * (*numFiles + 1));
+            if (filesList == NULL) {
+                printEr("Error:Problemas con realloc");
+                return NULL;
+            }
+            if (asprintf(&filesList[*numFiles], "%s", input->d_name) == -1) {
                 printEr("Error:Problemas con asprintf");
                 return NULL;
             }
@@ -107,11 +139,23 @@ int main (int argc, char** argv) {
 
     printConfigFile(server_config);
 
-    //TODO: Testing part
+    //TODO:  REMOVE THESE LINES, THEY ARE JUST FOR TESTING
 
-    int numFiles = 0;
+    int numFiles;
     char** files;
 
+    files = getFoldersName(&numFiles);
+    if (files != NULL){
+        for (int i = 0; i < numFiles; i++){
+            write(STDOUT_FILENO, files[i], strlen(files[i]));
+            free(files[i]);
+        }
+        free(files);
+    }else {
+        printx("Error en la lectura de archivos o carpeta vacia");
+    }
+
+    
     files = getFilesName(&numFiles);
     if (files != NULL){
         for (int i = 0; i < numFiles; i++){
@@ -120,7 +164,7 @@ int main (int argc, char** argv) {
         }
         free(files);
     }else {
-        printx("Error");
+        printx("Error en la lectura de archivos o carpeta vacia");
     }
 
     ///////////////////

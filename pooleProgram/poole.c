@@ -6,6 +6,7 @@
 #define PATH "pooleProgram/data"
 
 //TODO: si hay tiempo crear una estructura para ficheros y directorios, crear variables globales y manejar-los en terminar ejecucion.
+////////
 typedef struct {
     pthread_t* threadClient;
     int* fd_client;
@@ -13,7 +14,6 @@ typedef struct {
 } ClientsSockets;
 
 ClientsSockets Clients;
-////////
 
 int fd_config;
 int fd_socket;
@@ -64,46 +64,6 @@ void terminateExecution () {
     raise(SIGINT);
 }
 
-void disconect(int fd_client){
-    for (int i = 0; i < Clients.numClients; i++){
-        if (Clients.fd_client[i] == fd_client){
-            for (int j = i; j < Clients.numClients ; j++) {
-                Clients.fd_client[i] = Clients.fd_client[i + 1];
-            }
-            Clients.numClients--;
-            Clients.fd_client = realloc(Clients.fd_client, sizeof(int) * (Clients.numClients + 1));
-            break;
-        }else{
-            printEr("Error: En la desconexion");
-        }
-    }
-    sendFrame(0x06, "CON_OK", "", fd_client);
-    close(fd_client);
-}
-
-void* runServer(void* arg){
-    int fd_client = *((int*)arg);
-    Frame receive;
-    do{
-        receive = receiveFrame(fd_client);
-    } while (strcmp(receive.header, "EXIT"));
-    disconect(fd_client);
-
-    return NULL;
-}
-
-void addClient(){
-    struct sockaddr_in c_addr;
-    socklen_t c_len = sizeof(c_addr);
-    int index = Clients.numClients;
-    
-    Clients.fd_client = realloc(Clients.fd_client, sizeof(int) * (index + 1));
-    Clients.threadClient = realloc(Clients.threadClient, sizeof(pthread_t) * (index + 1));
-    (Clients.numClients)++;
-
-    Clients.fd_client[index] = accept(fd_socket, (void *) &c_addr, &c_len);
-    pthread_create(&Clients.threadClient[index], NULL, runServer, &Clients.fd_client[index]);
-}
 
 char** getFilesName(int *numFiles){
     // Abre el directorio
@@ -168,7 +128,62 @@ char** getFoldersName(int *numFiles){
     return filesList;
 }
 
+void disconect(int fd_client){
+    for (int i = 0; i < Clients.numClients; i++){
+        if (Clients.fd_client[i] == fd_client){
+            for (int j = i; j < Clients.numClients ; j++) {
+                Clients.fd_client[i] = Clients.fd_client[i + 1];
+            }
+            Clients.numClients--;
+            Clients.fd_client = realloc(Clients.fd_client, sizeof(int) * (Clients.numClients + 1));
+            break;
+        }
+    }
+    sendFrame(0x06, "CON_OK", "", fd_client);
+    close(fd_client);
+}
 
+void* runServer(void* arg){
+    int fd_client = *((int*)arg);
+    Frame receive;
+
+    receive = receiveFrame(fd_client);
+    if(strcmp(receive.header, "NEW_BOWMAN") == 0){
+        printx("New user connected: ");
+        write(STDOUT_FILENO, receive.data, strlen(receive.data));
+        write(STDOUT_FILENO,"\n", 1);
+        sendFrame(0x01, "CON_OK", "", fd_client);
+        do{
+            receive = receiveFrame(fd_client);
+            if(strcmp(receive.header, "LIST_SONGS") == 0){
+                //sendFrame(0x02, "SONGS_RESPONSE", "", fd_client);
+                printx("LIST_SONGS");
+            }else if(strcmp(receive.header, "LIST_PLAYLISTS") == 0){
+                //sendFrame(0x01, "PLAYLISTS_RESPONSE", "", fd_client);
+                printx("LIST_PLAYLISTS");
+            }
+        } while (strcmp(receive.header, "EXIT"));
+    }else {
+        printx("Error al conectar-se");
+    }
+
+    
+    disconect(fd_client);
+    return NULL;
+}
+
+void addClient(){
+    struct sockaddr_in c_addr;
+    socklen_t c_len = sizeof(c_addr);
+    int index = Clients.numClients;
+    
+    Clients.fd_client = realloc(Clients.fd_client, sizeof(int) * (index + 1));
+    Clients.threadClient = realloc(Clients.threadClient, sizeof(pthread_t) * (index + 1));
+    (Clients.numClients)++;
+
+    Clients.fd_client[index] = accept(fd_socket, (void *) &c_addr, &c_len);
+    pthread_create(&Clients.threadClient[index], NULL, runServer, &Clients.fd_client[index]);
+}
 
 //main function :p
 int main (int argc, char** argv) {
@@ -190,10 +205,11 @@ int main (int argc, char** argv) {
         printEr("\nERROR: Cannot open the file. Filename may be incorrect\n");
         return 0;
     }
-
+    printx("Reading configuration file\n");
     server_config = readConfigFile(fd_config);
+    
 
-    printConfigFile(server_config);
+    //printConfigFile(server_config);
 
     //TODO:  REMOVE THESE LINES, THEY ARE JUST FOR TESTING
 
@@ -224,10 +240,12 @@ int main (int argc, char** argv) {
     }*/
 
     ///////////////////
-
-    doDiscoveryHandshake();
+    printx("Connecting Smyslov Server to the system..\n");
+    //doDiscoveryHandshake();           Descomentar esto!
+    printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");
 
     fd_socket = startServer(server_config.port_poole, server_config.ip_poole);
+    printx("\nWaiting for connections...\n\n");
 
     while (1){
         addClient();

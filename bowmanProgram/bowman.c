@@ -18,11 +18,11 @@ void enterCommandMode() {
         command = readUntilChar(STDIN_FILENO, '\n');
         command_case_num = commandToCmdCaseNum(command);
         free(command);
-
+        int fd_socket = startServerConnection(client_config.ip_discovery, client_config.port_discovery); //temp
         switch (command_case_num) {
             case CONNECT_CMD:
                 printx("Comanda OK\n");
-                int fd_socket = startServerConnection(client_config.ip_discovery, client_config.port_discovery);
+                
                 sendFrame(0x01, "NEW_BOWMAN", client_config.name, fd_socket);
                 
                 Frame responseFrame = receiveFrame(fd_socket);
@@ -31,13 +31,16 @@ void enterCommandMode() {
                 printx(buffer2);
                 break;
             case LOGOUT_CMD:
+                sendFrame(0x06, "EXIT", client_config.name, fd_socket);
                 printx("Comanda OK\n");
                 exit_flag = 1;
                 break;
             case LIST_SONGS_CMD:
+                sendFrame(0x02, "LIST_SONGS", "", fd_socket);
                 printx("Comanda OK\n");
                 break;
             case LIST_PLAYLISTS_CMD:
+                sendFrame(0x02, "LIST_PLAYLISTS", "", fd_socket);
                 printx("Comanda OK\n");
                 break;
             case DOWNLOAD_SONG_CMD:
@@ -111,6 +114,12 @@ int main (int argc, char** argv) {
     }
 
     printConfigFile(client_config);
+    
+    //TODO: Eliminar esta parte es temporal
+
+
+
+    ////////////
 
     enterCommandMode();
     

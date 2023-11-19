@@ -1,5 +1,9 @@
 #include "../globals.h"
 #include "pooleConfig.h"
+#include "sys/select.h"
+#include <dirent.h>
+
+#define PATH "pooleProgram/data"
 
 int fd_config;
 int fd_client;
@@ -45,6 +49,39 @@ void terminateExecution () {
     raise(SIGINT);
 }
 
+char** getFilesName(int *numFiles){
+    // Abre el directorio
+    DIR* dir = opendir(PATH);
+
+    if (dir == NULL) {
+        return NULL;
+    }
+
+    struct dirent *entrada;
+    char** filesList = NULL;
+
+    while ((entrada = readdir(dir)) != NULL) {
+        if (entrada->d_type != DT_DIR && strcmp(entrada->d_name, ".") != 0 && strcmp(entrada->d_name, "..") != 0) {
+            filesList = realloc(filesList,sizeof(char*) * (*numFiles + 1));
+            if (filesList == NULL) {
+                printEr("Error:Problemas con realloc");
+                return NULL;
+            }
+            if (asprintf(&filesList[*numFiles], "%s", entrada->d_name) == -1) {
+                printEr("Error:Problemas con asprintf");
+                return NULL;
+            }
+            (*numFiles)++;
+        }
+    }
+
+    closedir(dir);
+
+    return filesList;
+}
+
+
+
 //main function :p
 int main (int argc, char** argv) {
 
@@ -70,15 +107,33 @@ int main (int argc, char** argv) {
 
     printConfigFile(server_config);
 
+    //TODO: Testing part
+
+    int numFiles = 0;
+    char** files;
+
+    files = getFilesName(&numFiles);
+    if (files != NULL){
+        for (int i = 0; i < numFiles; i++){
+            write(STDOUT_FILENO, files[i], strlen(files[i]));
+            free(files[i]);
+        }
+        free(files);
+    }else {
+        printx("Error");
+    }
+
+    ///////////////////
+
     doDiscoveryHandshake();
 
     //TODO: REMOVE THESE LINES, THEY ARE JUST FOR TESTING
-    struct sockaddr_in c_addr;
+
+    /*struct sockaddr_in c_addr;
     socklen_t c_len = sizeof(c_addr);
 
     fd_socket = startServer(server_config.port_poole, server_config.ip_poole);
-    fd_client = accept(fd_socket, (void *) &c_addr, &c_len);
-
+    fd_client = accept(fd_socket, (void *) &c_addr, &c_len);*/
     /////////
     
     terminateExecution();

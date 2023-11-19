@@ -60,3 +60,4 @@ void printConfigFile(ServerConfig server_config) {
     printDynStr(buffer, buffSize);
     free(buffer);
 }
+

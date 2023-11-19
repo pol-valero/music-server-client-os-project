@@ -22,10 +22,6 @@ PooleStats createPooleStats (Frame frame) {
 
     PooleStats poole_stats;
 
-    //TODO: TODO: Create new readStringUntilChar that returns the endCharPos + 1 (we will interpret as startingPosition)
-    //We will pass the string by reference to be filled. 
-    
-    //Alternative: do tests with the current method
     int endCharPos;
     
     poole_stats.name = readStringUntilChar(0, frame.data, '&', &endCharPos);
@@ -87,10 +83,54 @@ void addPooleStatsToList (PooleStatsList *list, PooleStats poole_stats) {
 
 }
 
+PooleStats findPooleWithMinConnections (PooleStatsList* list) {
+
+    int min_connections = (*list).poole_stats[0].n_connections;
+    int index_min_connections = 0;
+
+    for (int i = 1; i < (*list).n_poole_stats; i++) {
+        if ((*list).poole_stats[i].n_connections < min_connections) {
+            min_connections = (*list).poole_stats[i].n_connections;
+            index_min_connections = i;
+        }
+    }
+
+    (*list).poole_stats[index_min_connections].n_connections++; //We increase the number of connections of the selected Poole server
+
+    return (*list).poole_stats[index_min_connections];
+}
+
+void handlePooleFrameType(Frame frame, int fd_client, PooleStatsList* list) {
+
+    switch (frame.type) {
+
+        case 0x01:
+            //New connection
+            {
+            sendFrame(0x01, "CON_OK", "", fd_client);
+             
+            PooleStats poole_stats = createPooleStats(frame);
+
+            addPooleStatsToList(list, poole_stats);
+            }
+            break;
+
+        case 0x06:
+            //Bowman client disconnection from Poole
+            //TODO: Poole will send this frame with its name, ip and port so that we can decrease the number of connections of the Poole server
+            break;
+
+        case 0x07:
+            //If we receive this frame type, it means that the last frame we sent did not properly arrive
+            //TODO: Send again the last frame? (We will have to have a variable with the last frame always saved)
+            break;
+    }
+
+}
+
 void* listenForPooleConnections(void* arg) {
     //Thread
 
-    //PooleStatsList list = *((PooleStatsList*) arg);
     PooleStatsList* list = (PooleStatsList*) arg;
 
     int fd_client;
@@ -109,21 +149,44 @@ void* listenForPooleConnections(void* arg) {
         Frame frame = receiveFrame(fd_client);
 
         if (frameIsValid(frame)) {
-            sendFrame(0x01, "CON_OK", "", fd_client);
-             
-            PooleStats poole_stats = createPooleStats(frame);
 
-            //addPooleStatsToList(&list, poole_stats);
-            addPooleStatsToList(list, poole_stats);
+            handlePooleFrameType(frame, fd_client, list);
 
         } else {
-            sendFrame(0x01, "CON_KO", "", fd_client);
+            //sendFrame(0x01, "CON_KO", "", fd_client);
+            sendFrame(0x07, "UNKNOWN", "", fd_client);
         }
 
         free(frame.header);
         free(frame.data);
     }
 
+}
+
+void handleBowmanFrameType(Frame frame, int fd_client, PooleStatsList* list) {
+    
+    switch (frame.type) {
+
+        case 0x01:
+            //New connection
+            {
+            PooleStats poole_min_conn = findPooleWithMinConnections(list);
+
+            char* buffer;
+            asprintf(&buffer, "%s&%s&%d", poole_min_conn.name, poole_min_conn.ip, poole_min_conn.port);
+
+            sendFrame(0x01, "CON_OK", buffer, fd_client);
+
+            free(buffer);
+            }
+            break;
+
+        case 0x07:
+            //If we receive this frame type, it means that the last frame we sent did not properly arrive
+            //TODO: Send again the last frame? (We will have to have a variable with the last frame always saved)
+            break;
+
+    }
 }
 
 void* listenForBowmanConnections(void* arg) {
@@ -147,13 +210,19 @@ void* listenForBowmanConnections(void* arg) {
 
         Frame frame = receiveFrame(fd_client);
         
-        printPooleStatsList(*list); //TODO: Remove
-        //TODO: If the frame is valid, we will send to Bowman the info of the Poole that has the least connections
-
+        //If the frame is valid, we will send to Bowman the info of the Poole that has the least connections
         if (frameIsValid(frame)) {
-            sendFrame(0x01, "CON_OK", "", fd_client);
+            
+            if ((*list).n_poole_stats == 0) {
+                sendFrame(0x01, "CON_KO", "", fd_client); 
+            } else {
+                handleBowmanFrameType(frame, fd_client, list);
+            }
+
         } else {
-            sendFrame(0x01, "CON_KO", "", fd_client);
+
+            sendFrame(0x07, "UNKNOWN", "", fd_client);
+
         }
 
         free(frame.header);

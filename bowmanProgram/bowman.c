@@ -2,9 +2,92 @@
 #include "bowmanConfig.h"
 #include "bowmanCmdProcessing.h"
 
+typedef struct {
+    char* name;
+    char* ip;
+    int port;
+} PooleInfo;
+
+PooleInfo poole_info;
+
 int fd_config;
 
 ClientConfig client_config; //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
+
+void printInitMsg() {
+    char* buffer;
+    int buffSize;
+
+    buffSize = asprintf(&buffer, "\n%s user initialized\n", client_config.name);
+    printDynStr(buffer, buffSize);
+    free(buffer);
+}
+
+void printConnectionInitMsg() {
+    char* buffer;
+    int buffSize;
+
+    buffSize = asprintf(&buffer, "\n%s connected to HAL 9000 system, welcome music lover!\n", client_config.name);
+    printDynStr(buffer, buffSize);
+    free(buffer);
+}
+
+PooleInfo frameToPooleInfo (Frame frame) {
+
+    PooleInfo poole_info;
+
+    int endCharPos;
+    
+    poole_info.name = readStringUntilChar(0, frame.data, '&', &endCharPos);
+    poole_info.ip = readStringUntilChar(endCharPos + 1, frame.data, '&', &endCharPos);
+    poole_info.port = atoi(readStringUntilChar(endCharPos + 1, frame.data, ' ', &endCharPos)); //Does not matter the endChar we put here
+
+    return poole_info;
+}
+
+void connectToDiscovery () {
+    int fd_socket = startServerConnection(client_config.ip_discovery, client_config.port_discovery);
+    sendFrame(0x01, "NEW_BOWMAN", client_config.name, fd_socket);
+    
+    Frame responseFrame = receiveFrame(fd_socket);
+
+
+    if (frameIsValid(responseFrame)) {
+
+        if (strcmp(responseFrame.header, "CON_OK") == 0) {
+            close (fd_socket);
+            poole_info = frameToPooleInfo(responseFrame);
+
+            fd_socket = startServerConnection(poole_info.ip, poole_info.port);
+            sendFrame(0x01, "NEW_BOWMAN", client_config.name, fd_socket);
+
+            responseFrame = receiveFrame(fd_socket);
+
+            if (frameIsValid(responseFrame)) {
+
+                if (strcmp(responseFrame.header, "CON_OK") == 0) {
+                    printConnectionInitMsg();
+                } else {
+                    printEr("ERROR: Connection to poole server failed, CON_KO returned\n");
+                }
+
+            } else {
+                //TODO: Maybe do a while loop to keep trying to receive a valid frame
+                sendFrame(0x07, "UNKNOWN", "", fd_socket); 
+            }
+        } else {
+            printEr("ERROR: Connection to discovery server failed, CON_KO returned\n");
+        }
+
+    } else {
+        sendFrame(0x07, "UNKNOWN", "", fd_socket);
+        //TODO: Maybe do a while loop to keep trying to receive a valid frame
+    }
+
+    char buffer2[100];
+    sprintf(buffer2, "%d %d %s %s", responseFrame.type, responseFrame.header_length, responseFrame.header, responseFrame.data);
+    printx(buffer2);
+}
 
 // Function to manage user-input commands.
 void enterCommandMode() {
@@ -21,18 +104,13 @@ void enterCommandMode() {
         int fd_socket = startServerConnection(client_config.ip_discovery, client_config.port_discovery); //temp
         switch (command_case_num) {
             case CONNECT_CMD:
-                printx("Comanda OK\n");
-                
-                sendFrame(0x01, "NEW_BOWMAN", client_config.name, fd_socket);
-                
-                Frame responseFrame = receiveFrame(fd_socket);
-                char buffer2[100];
-                sprintf(buffer2, "%d %d %s %s", responseFrame.type, responseFrame.header_length, responseFrame.header, responseFrame.data);
-                printx(buffer2);
+                //printx("Comanda OK\n");
+                connectToDiscovery();
                 break;
             case LOGOUT_CMD:
                 sendFrame(0x06, "EXIT", client_config.name, fd_socket);
                 printx("Comanda OK\n");
+                //TODO: disconnectFromPoole();
                 exit_flag = 1;
                 break;
             case LIST_SONGS_CMD:
@@ -113,13 +191,9 @@ int main (int argc, char** argv) {
         client_config = readConfigFile(fd_config);
     }
 
-    printConfigFile(client_config);
-    
-    //TODO: Eliminar esta parte es temporal
+    //printConfigFile(client_config);
 
-
-
-    ////////////
+    printInitMsg();
 
     enterCommandMode();
     

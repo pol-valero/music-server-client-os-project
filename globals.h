@@ -56,6 +56,8 @@ char* readUntilChar(int fd, char endChar);
 
 char* readUntilCharExceptLetter(int fd, char endChar, char exception);
 
+char* readStringUntilChar(int startingPos, char* string, char endChar, int* endCharPos);
+
 void printDynStr(char* buffer, int bufferSize);
 
 #endif

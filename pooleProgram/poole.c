@@ -37,6 +37,8 @@ void doDiscoveryHandshake() {
 
     sendFrame(0x01, "NEW_POOLE", buffer, fd_socket);
 
+    free(buffer);
+
     Frame responseFrame = receiveFrame(fd_socket);
 
     char buffer2[100];

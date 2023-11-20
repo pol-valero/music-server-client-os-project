@@ -93,32 +93,68 @@ void connectToDiscovery () {
 void enterCommandMode() {
     char* command;
     int command_case_num;
-    int exit_flag = 0;
-
+    //TODO: Change this
+        int fd_socket; 
+        Frame frame;
+        /////////////////////////
     do {
 
         printx("$ ");
         command = readUntilChar(STDIN_FILENO, '\n');
         command_case_num = commandToCmdCaseNum(command);
         free(command);
-        int fd_socket = startServerConnection(client_config.ip_discovery, client_config.port_discovery); //temp
+        
         switch (command_case_num) {
             case CONNECT_CMD:
                 //printx("Comanda OK\n");
-                connectToDiscovery();
+                //TODO: connectToDiscovery();
+                
+                //TODO: Change this
+                fd_socket = startServerConnection(client_config.ip_discovery, client_config.port_discovery); //temp
+                sendFrame(0x01, "NEW_BOWMAN", client_config.name, fd_socket);
+                frame = receiveFrame(fd_socket);
+                if (strcmp(frame.header, "CON_OK") != 0){
+                    printEr("Error al connectar\n");
+                    write(STDOUT_FILENO, frame.header, strlen(frame.header));
+                }
+                
+                printx("Floyd connected to HAL 9000 system, welcome music lover!\n");
+
+                //////////////////
                 break;
             case LOGOUT_CMD:
+                //TODO: Change this
+                
                 sendFrame(0x06, "EXIT", client_config.name, fd_socket);
+                frame = receiveFrame(fd_socket);
+                if (strcmp(frame.header, "CONOK")){
+                    printEr("Error al salir\n");
+                }
+                ////////////
                 printx("Comanda OK\n");
                 //TODO: disconnectFromPoole();
-                exit_flag = 1;
                 break;
             case LIST_SONGS_CMD:
+                //TODO: Change this
+                
                 sendFrame(0x02, "LIST_SONGS", "", fd_socket);
+                frame = receiveFrame(fd_socket);
+                if (strcmp(frame.header, "SONGS_RESPONSE")){
+                    printEr("Error al listar\n");
+                }
+                
+                ////////////////////
                 printx("Comanda OK\n");
                 break;
             case LIST_PLAYLISTS_CMD:
+                //TODO: Change this
+                
                 sendFrame(0x02, "LIST_PLAYLISTS", "", fd_socket);
+                frame = receiveFrame(fd_socket);
+                if (strcmp(frame.header, "PLAYLISTS_RESPONSE")){
+                    printEr("Error al listar");
+                }
+                ///////////////////
                 printx("Comanda OK\n");
                 break;
             case DOWNLOAD_SONG_CMD:
@@ -148,7 +184,7 @@ void enterCommandMode() {
                 break;
         }
 
-    } while (exit_flag == 0);
+    } while (command_case_num != LOGOUT_CMD);
 
 }
 

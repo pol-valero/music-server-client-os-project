@@ -1,5 +1,6 @@
 #include "../globals.h"
 #include "pooleConfig.h"
+
 #include "sys/select.h"
 #include <dirent.h>
 
@@ -8,19 +9,21 @@
 //TODO: si hay tiempo crear una estructura para ficheros y directorios, crear variables globales y manejar-los en terminar ejecucion.
 ////////
 typedef struct {
-    pthread_t* threadClient;
-    int* fd_client;
+    pthread_t threadClient;
+    int fd_client;
+    char* name;
+} ClientInfo;
+typedef struct {
+    ClientInfo* clientInfo;
     int numClients;
 } ClientsSockets;
 
 ClientsSockets Clients;
 
+ServerConfig server_config;  //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
+
 int fd_config;
 int fd_socket;
-
-ServerConfig server_config; //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
-
-
 
 void doDiscoveryHandshake() {
 
@@ -55,10 +58,13 @@ void terminateExecution () {
     free(server_config.ip_discovery);
     free(server_config.ip_poole);
 
-    for (int i = 0; i < Clients.numClients; i++){
-        close(Clients.fd_client[i]);
+    if (Clients.numClients != 0){
+        for (int i = 0; i < Clients.numClients; i++){
+            free(Clients.clientInfo[i].name);
+            close(Clients.clientInfo[i].fd_client);
+        }
+        free(Clients.clientInfo);
     }
-    free(Clients.fd_client);
 
     close (fd_config);
 
@@ -131,60 +137,102 @@ char** getFoldersName(int *numFiles){
 }
 
 void disconect(int fd_client){
-    for (int i = 0; i < Clients.numClients; i++){
-        if (Clients.fd_client[i] == fd_client){
-            for (int j = i; j < Clients.numClients ; j++) {
-                Clients.fd_client[i] = Clients.fd_client[i + 1];
+    if (Clients.numClients > 1){
+        for (int i = 0; i < Clients.numClients; i++){
+            if (Clients.clientInfo[i].fd_client == fd_client){
+                for (int j = i; j < Clients.numClients ; j++) {
+                    Clients.clientInfo[i].fd_client = Clients.clientInfo[i + 1].fd_client;
+                }
+                (Clients.numClients)--;
+                Clients.clientInfo = realloc(Clients.clientInfo, sizeof(ClientInfo) * (Clients.numClients));
+                
+                break;
             }
-            Clients.numClients--;
-            Clients.fd_client = realloc(Clients.fd_client, sizeof(int) * (Clients.numClients + 1));
-            break;
         }
+    }else {
+        (Clients.numClients)--;
+        free(Clients.clientInfo);
     }
-    sendFrame(0x06, "CON_OK", "", fd_client);
+    
+    sendFrame(0x06, "CONOK", "", fd_client);
     close(fd_client);
 }
 
 void* runServer(void* arg){
-    int fd_client = *((int*)arg);
+    ClientInfo clientInfo = *((ClientInfo*)arg);
     Frame receive;
 
-    receive = receiveFrame(fd_client);
-    if(strcmp(receive.header, "NEW_BOWMAN") == 0){
-        printx("New user connected: ");
-        write(STDOUT_FILENO, receive.data, strlen(receive.data));
-        write(STDOUT_FILENO,"\n", 1);
-        sendFrame(0x01, "CON_OK", "", fd_client);
-        do{
-            receive = receiveFrame(fd_client);
-            if(strcmp(receive.header, "LIST_SONGS") == 0){
-                //sendFrame(0x02, "SONGS_RESPONSE", "", fd_client);
-                printx("LIST_SONGS");
-            }else if(strcmp(receive.header, "LIST_PLAYLISTS") == 0){
-                //sendFrame(0x01, "PLAYLISTS_RESPONSE", "", fd_client);
-                printx("LIST_PLAYLISTS");
-            }
-        } while (strcmp(receive.header, "EXIT"));
-    }else {
-        printx("Error al conectar-se");
-    }
+    do{
+        receive = receiveFrame(clientInfo.fd_client);
+        if(strcmp(receive.header, "LIST_SONGS") == 0){
+            printx("New request – ");
+            write(STDOUT_FILENO, clientInfo.name, strlen(clientInfo.name));
+            printx("Floyd requires the list of songs.\n");
 
+            //TODO: ParseList()
+
+            printx("Sending song list to Floyd\n");
+            sendFrame(0x02, "SONGS_RESPONSE", "", clientInfo.fd_client);
+        }else if(strcmp(receive.header, "LIST_PLAYLISTS") == 0){
+             printx("New request – ");
+            write(STDOUT_FILENO, clientInfo.name, strlen(clientInfo.name));
+            printx("Floyd requires the list of playlists.\n");
+
+            //TODO: ParseList()
+
+            printx("Sending song list to Floyd\n");
+            sendFrame(0x02, "PLAYLISTS_RESPONSE", "", clientInfo.fd_client);
+        }else if (!strcmp(receive.header, "EXIT")){
+            printx("User disconnected: ");
+            write(STDOUT_FILENO, receive.data, strlen(receive.data));
+            printx("\n");
+        }else if (!strcmp(receive.header, "UNKNOWN")){
+            printEr("Error: Error al recibir paquete\n");
+        }
+    } while (strcmp(receive.header, "EXIT"));
     
-    disconect(fd_client);
+    disconect(clientInfo.fd_client);
+
     return NULL;
 }
 
 void addClient(){
     struct sockaddr_in c_addr;
     socklen_t c_len = sizeof(c_addr);
-    int index = Clients.numClients;
-    
-    Clients.fd_client = realloc(Clients.fd_client, sizeof(int) * (index + 1));
-    Clients.threadClient = realloc(Clients.threadClient, sizeof(pthread_t) * (index + 1));
-    (Clients.numClients)++;
 
-    Clients.fd_client[index] = accept(fd_socket, (void *) &c_addr, &c_len);
-    pthread_create(&Clients.threadClient[index], NULL, runServer, &Clients.fd_client[index]);
+    
+    int fd_temp = accept(fd_socket, (void *) &c_addr, &c_len);
+    Frame receive;
+    
+    receive = receiveFrame(fd_temp);
+
+    if (!strcmp(receive.header, "NEW_BOWMAN")){
+        int index = Clients.numClients;
+        
+        if (index == 0){
+            Clients.clientInfo = malloc(sizeof(ClientInfo));
+        }else{
+            Clients.clientInfo = realloc(Clients.clientInfo, sizeof(ClientInfo) * index + 1);
+        }
+        
+        (Clients.numClients)++;
+
+        Clients.clientInfo[index].fd_client = fd_temp;
+        pthread_create(&Clients.clientInfo[index].threadClient, NULL, runServer, &Clients.clientInfo[index]);
+
+        Clients.clientInfo->name = receive.data;
+
+        sendFrame(0x01, "CON_OK", "", fd_temp);
+
+        printx("New user connected: ");
+        write(STDOUT_FILENO, receive.data, strlen(receive.data));
+        printx("\n");
+
+    }else{
+        sendFrame(0x07, "UNKNOWN", "", fd_temp);
+        close(fd_temp);
+        printEr("Error: Problemas al acceptar un cliente.");
+    }
 }
 
 //main function :p
@@ -209,9 +257,6 @@ int main (int argc, char** argv) {
     }
     printx("Reading configuration file\n");
     server_config = readConfigFile(fd_config);
-    
-
-    //printConfigFile(server_config);
 
     //TODO:  REMOVE THESE LINES, THEY ARE JUST FOR TESTING
 
@@ -242,11 +287,13 @@ int main (int argc, char** argv) {
     }*/
 
     ///////////////////
-    printx("Connecting Smyslov Server to the system..\n");
-    //doDiscoveryHandshake();           Descomentar esto!
-    printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");
 
+    printx("Connecting Smyslov Server to the system..\n");
+
+    //TODO: doDiscoveryHandshake();
     fd_socket = startServer(server_config.port_poole, server_config.ip_poole);
+
+    printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");
     printx("\nWaiting for connections...\n\n");
 
     while (1){

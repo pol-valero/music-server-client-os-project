@@ -134,9 +134,58 @@ char** getAllPlaylists(int* n_playlists) {
     return playlists;
 }
 
-/*char** getAllSongs() {
-    //TODO: Use getAllPlaylists() to get all the playlists and then get all the songs from each playlist (changing the path of the getFilesName function)
-}*/
+
+char** getAllSongs(int* n_songs) {
+
+    int n_playlists;
+    char** playlists = getAllPlaylists(&n_playlists);
+
+    int n_songs_playlist = 0;
+    char** songs_playlist;
+
+    char** songs = NULL;
+   int n_total_songs = 0;
+
+    char* playlistName;
+    char* pathToPlaylist;
+
+    for (int i = 0; i < n_playlists; i++) {
+        
+        playlistName = playlists[i];
+        asprintf(&pathToPlaylist, "%s/%s", PATH, playlistName);
+        songs_playlist = getFilesName(&n_songs_playlist, pathToPlaylist);
+        
+        for (int i = 0; i < n_songs_playlist; i++){
+            //write(STDOUT_FILENO, songs_playlist[i], strlen(songs_playlist[i]));
+            songs = realloc(songs, sizeof(char*) * (n_total_songs + 1));
+            songs[n_total_songs] = songs_playlist[i];
+            n_total_songs++;
+        }
+
+    
+    }
+
+    *n_songs = n_total_songs;
+    return songs;
+}
+
+//TODO: Remove this function, it is just for testing
+void printListString() {
+    int numFiles;
+    char** files;
+
+    //files = getAllPlaylists(&numFiles);
+    files = getAllSongs(&numFiles);
+    if (files != NULL){
+        for (int i = 0; i < numFiles; i++){
+            write(STDOUT_FILENO, files[i], strlen(files[i]));
+            free(files[i]);
+        }
+        free(files);
+    }else {
+        printx("Error en la lectura de archivos o carpeta vacia");
+    }
+}
 
 void* runServer(void* arg){
     ClientInfo clientInfo = *((ClientInfo*)arg);
@@ -245,19 +294,7 @@ int main (int argc, char** argv) {
 
     //TODO:  REMOVE THESE LINES, THEY ARE JUST FOR TESTING
 
-    int numFiles;
-    char** files;
-
-    files = getAllPlaylists(&numFiles);
-    if (files != NULL){
-        for (int i = 0; i < numFiles; i++){
-            write(STDOUT_FILENO, files[i], strlen(files[i]));
-            free(files[i]);
-        }
-        free(files);
-    }else {
-        printx("Error en la lectura de archivos o carpeta vacia");
-    }
+    //printListString();
 
     ///////////////////
 

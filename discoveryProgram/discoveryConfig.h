@@ -10,12 +10,6 @@ typedef struct {
     int port_bowman;
 } DiscoveryConfig;
 
-typedef struct {
-    char* name;
-    char* ip;
-    int port;
-    int n_connections;
-} PooleStats;
 
 DiscoveryConfig readConfigFile(int fd_config);
 

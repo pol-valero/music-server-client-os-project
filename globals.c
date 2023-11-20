@@ -257,6 +257,30 @@ char* readUntilCharExceptLetter(int fd, char endChar, char exception) {
     return string;
 }
 
+char* readStringUntilChar(int startingPos, char* string, char endChar, int* endCharPos) {
+    int length = 0;
+
+    while (string[startingPos + length] != '\0' && string[startingPos + length] != endChar) {
+        length++;
+    }
+
+    char* result = (char*)malloc((length + 1) * sizeof(char));
+
+    for (int i = 0; i < length; i++) {
+        result[i] = string[startingPos + i];
+    }
+
+    result[length] = '\0';
+
+    if (string[startingPos + length] == endChar) {
+        *endCharPos = startingPos + length;
+    } else {
+        *endCharPos = -1; //Character not found
+    }
+
+    return result;
+}
+
 //Prints dynamic string, where we cannot use strlen
 void printDynStr(char* buffer, int bufferSize) {
      write(1, buffer, bufferSize);

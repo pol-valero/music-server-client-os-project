@@ -78,8 +78,8 @@ void terminateExecution () {
 }
 
 
-char** getFilesName(int *numFiles){
-    DIR* dir = opendir("pooleProgram/data/Playlist1");
+char** getFilesName(int *numFiles, char* pathToOpen){
+    DIR* dir = opendir(pathToOpen);
 
     if (dir == NULL) {
         return NULL;
@@ -93,6 +93,9 @@ char** getFilesName(int *numFiles){
         if (strcmp(input->d_name, ".") != 0 && strcmp(input->d_name, "..") != 0) {
             filesList = realloc(filesList,sizeof(char*) * (*numFiles + 1));
             asprintf(&filesList[*numFiles], "%s", input->d_name);
+
+            //printx(filesList[*numFiles]);
+
             (*numFiles)++;
         }
     }
@@ -125,6 +128,16 @@ void disconect(int fd_client){
     close(fd_client);
 }
 
+char** getAllPlaylists(int* n_playlists) {
+    char** playlists;
+    playlists = getFilesName(n_playlists, PATH);
+    return playlists;
+}
+
+/*char** getAllSongs() {
+    //TODO: Use getAllPlaylists() to get all the playlists and then get all the songs from each playlist (changing the path of the getFilesName function)
+}*/
+
 void* runServer(void* arg){
     ClientInfo clientInfo = *((ClientInfo*)arg);
     Frame receive;
@@ -137,6 +150,7 @@ void* runServer(void* arg){
             printx(" requires the list of songs.\n");
 
             //TODO: ParseList()
+            //char** songs = getAllSongs();
 
             printx("Sending song list to ");
             printx(clientInfo.name);
@@ -234,7 +248,7 @@ int main (int argc, char** argv) {
     int numFiles;
     char** files;
 
-    files = getFilesName(&numFiles);
+    files = getAllPlaylists(&numFiles);
     if (files != NULL){
         for (int i = 0; i < numFiles; i++){
             write(STDOUT_FILENO, files[i], strlen(files[i]));

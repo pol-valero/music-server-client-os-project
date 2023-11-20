@@ -100,6 +100,8 @@ int frameIsValid(Frame frame) {
         return 0;
     }
 
+    //TODO: Check if header is of any known type? (CON_OK, CON_KO, etc.)
+
     if (frame.header_length != strlen(frame.header) + 1) {
         return 0;
     }

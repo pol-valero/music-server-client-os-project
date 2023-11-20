@@ -16,6 +16,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <pthread.h>
+#include <sys/wait.h>
 
 #define OK 1
 #define KO 0

@@ -45,7 +45,7 @@ PooleInfo frameToPooleInfo (Frame frame) {
     return poole_info;
 }
 
-void connectToDiscovery () {
+int connectToPoole () {
     int fd_socket = startServerConnection(client_config.ip_discovery, client_config.port_discovery);
     sendFrame(0x01, "NEW_BOWMAN", client_config.name, fd_socket);
     
@@ -67,6 +67,7 @@ void connectToDiscovery () {
 
                 if (strcmp(responseFrame.header, "CON_OK") == 0) {
                     printConnectionInitMsg();
+                    return fd_socket;
                 } else {
                     printEr("ERROR: Connection to poole server failed, CON_KO returned\n");
                 }
@@ -83,6 +84,8 @@ void connectToDiscovery () {
         sendFrame(0x07, "UNKNOWN", "", fd_socket);
         //TODO: Maybe do a while loop to keep trying to receive a valid frame
     }
+
+    return -1;
 
     char buffer2[100];
     sprintf(buffer2, "%d %d %s %s", responseFrame.type, responseFrame.header_length, responseFrame.header, responseFrame.data);
@@ -107,44 +110,18 @@ void enterCommandMode() {
         switch (command_case_num) {
             case CONNECT_CMD:
                 //printx("Comanda OK\n");
-                //TODO: connectToDiscovery();
-                
-                //TODO: Change this
-                fd_socket = startServerConnection(client_config.ip_discovery, client_config.port_discovery); //temp
-                sendFrame(0x01, "NEW_BOWMAN", client_config.name, fd_socket);
-                frame = receiveFrame(fd_socket);
-                if (strcmp(frame.header, "CON_OK") != 0){
-                    printEr("Error al connectar\n");
-                    write(STDOUT_FILENO, frame.header, strlen(frame.header));
-                }
-                
-                printx("Floyd connected to HAL 9000 system, welcome music lover!\n");
-
-                //////////////////
+                fd_socket = connectToPoole();
                 break;
             case LOGOUT_CMD:
-                //TODO: Change this
-                
-                sendFrame(0x06, "EXIT", client_config.name, fd_socket);
-                frame = receiveFrame(fd_socket);
-                if (strcmp(frame.header, "CONOK")){
-                    printEr("Error al salir\n");
-                }
-                ////////////
                 printx("Comanda OK\n");
                 //TODO: disconnectFromPoole();
                 break;
             case LIST_SONGS_CMD:
-                //TODO: Change this
-                
+                printx("Comanda OK\n");
                 sendFrame(0x02, "LIST_SONGS", "", fd_socket);
                 frame = receiveFrame(fd_socket);
-                if (strcmp(frame.header, "SONGS_RESPONSE")){
-                    printEr("Error al listar\n");
-                }
-                
-                ////////////////////
-                printx("Comanda OK\n");
+                //TODO: Create function that receives frame and depending on the header, listens for 
+                //more frames if necessary (if there are a lot of songs)
                 break;
             case LIST_PLAYLISTS_CMD:
                 //TODO: Change this

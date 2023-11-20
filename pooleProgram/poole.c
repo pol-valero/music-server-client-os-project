@@ -13,6 +13,7 @@ typedef struct {
     int fd_client;
     char* name;
 } ClientInfo;
+
 typedef struct {
     ClientInfo* clientInfo;
     int numClients;
@@ -44,10 +45,14 @@ void doDiscoveryHandshake() {
 
     Frame responseFrame = receiveFrame(fd_socket);
 
+    //TODO: REMOVE
     char buffer2[100];
     sprintf(buffer2, "%d %d %s %s", responseFrame.type, responseFrame.header_length, responseFrame.header, responseFrame.data);
     printx(buffer2);
         
+    printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");
+    printx("\nWaiting for connections...\n\n");
+
 }
 
 // Handle unexpected termination scenarios.
@@ -74,39 +79,7 @@ void terminateExecution () {
 
 
 char** getFilesName(int *numFiles){
-    // Abre el directorio
-    DIR* dir = opendir(PATH);
-
-    if (dir == NULL) {
-        return NULL;
-    }
-
-    struct dirent *input;
-    char** filesList = NULL;
-    *numFiles = 0;
-    while ((input = readdir(dir)) != NULL) {
-        if (input->d_type == DT_REG) {
-            filesList = realloc(filesList,sizeof(char*) * (*numFiles + 1));
-            if (filesList == NULL) {
-                printEr("Error:Problemas con realloc");
-                return NULL;
-            }
-            if (asprintf(&filesList[*numFiles], "%s", input->d_name) == -1) {
-                printEr("Error:Problemas con asprintf");
-                return NULL;
-            }
-            (*numFiles)++;
-        }
-    }
-
-    closedir(dir);
-
-    return filesList;
-}
-
-char** getFoldersName(int *numFiles){
-    // Abre el directorio
-    DIR* dir = opendir(PATH);
+    DIR* dir = opendir("pooleProgram/data/Playlist1");
 
     if (dir == NULL) {
         return NULL;
@@ -117,16 +90,9 @@ char** getFoldersName(int *numFiles){
     *numFiles = 0;
 
     while ((input = readdir(dir)) != NULL) {
-        if (input->d_type == DT_DIR && strcmp(input->d_name, ".") != 0 && strcmp(input->d_name, "..") != 0) {
+        if (strcmp(input->d_name, ".") != 0 && strcmp(input->d_name, "..") != 0) {
             filesList = realloc(filesList,sizeof(char*) * (*numFiles + 1));
-            if (filesList == NULL) {
-                printEr("Error:Problemas con realloc");
-                return NULL;
-            }
-            if (asprintf(&filesList[*numFiles], "%s", input->d_name) == -1) {
-                printEr("Error:Problemas con asprintf");
-                return NULL;
-            }
+            asprintf(&filesList[*numFiles], "%s", input->d_name);
             (*numFiles)++;
         }
     }
@@ -134,6 +100,7 @@ char** getFoldersName(int *numFiles){
     closedir(dir);
 
     return filesList;
+   
 }
 
 void disconect(int fd_client){
@@ -165,13 +132,17 @@ void* runServer(void* arg){
     do{
         receive = receiveFrame(clientInfo.fd_client);
         if(strcmp(receive.header, "LIST_SONGS") == 0){
-            printx("New request – ");
-            write(STDOUT_FILENO, clientInfo.name, strlen(clientInfo.name));
-            printx("Floyd requires the list of songs.\n");
+            printx("New request - ");
+            printx(clientInfo.name);
+            printx(" requires the list of songs.\n");
 
             //TODO: ParseList()
 
-            printx("Sending song list to Floyd\n");
+            printx("Sending song list to ");
+            printx(clientInfo.name);
+
+            
+
             sendFrame(0x02, "SONGS_RESPONSE", "", clientInfo.fd_client);
         }else if(strcmp(receive.header, "LIST_PLAYLISTS") == 0){
              printx("New request – ");
@@ -212,7 +183,7 @@ void addClient(){
         if (index == 0){
             Clients.clientInfo = malloc(sizeof(ClientInfo));
         }else{
-            Clients.clientInfo = realloc(Clients.clientInfo, sizeof(ClientInfo) * index + 1);
+            Clients.clientInfo = realloc(Clients.clientInfo, sizeof(ClientInfo) * (index + 1));
         }
         
         (Clients.numClients)++;
@@ -260,10 +231,10 @@ int main (int argc, char** argv) {
 
     //TODO:  REMOVE THESE LINES, THEY ARE JUST FOR TESTING
 
-    /*int numFiles;
+    int numFiles;
     char** files;
 
-    files = getFoldersName(&numFiles);
+    files = getFilesName(&numFiles);
     if (files != NULL){
         for (int i = 0; i < numFiles; i++){
             write(STDOUT_FILENO, files[i], strlen(files[i]));
@@ -274,27 +245,14 @@ int main (int argc, char** argv) {
         printx("Error en la lectura de archivos o carpeta vacia");
     }
 
-    
-    files = getFilesName(&numFiles);
-    if (files != NULL){
-        for (int i = 0; i < numFiles; i++){
-            write(STDOUT_FILENO, files[i], strlen(files[i]));
-            free(files[i]);
-        }
-        free(files);
-    }else {
-        printx("Error en la lectura de archivos o carpeta vacia");
-    }*/
-
     ///////////////////
 
     printx("Connecting Smyslov Server to the system..\n");
 
-    //TODO: doDiscoveryHandshake();
+    doDiscoveryHandshake();
     fd_socket = startServer(server_config.port_poole, server_config.ip_poole);
 
-    printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");
-    printx("\nWaiting for connections...\n\n");
+
 
     while (1){
         addClient();

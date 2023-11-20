@@ -187,6 +187,76 @@ void printListString() {
     }
 }
 
+void sendAllSongs(char** songs, int n_songs, int fd_client) {
+    char* buffer;
+
+    char* header;
+
+    asprintf(&header, "SONGS_RESPONSE&%d", n_songs);
+
+    char* newFrameIncomingMsg = "NEW_FRAME_INCOMING";
+    char* newFrameNotIncomingMsg = "NEW_FRAME_NOT_INCOMING";
+
+
+    for (int i = 0; i < n_songs; i++){
+
+        if (i == 0) {
+
+            asprintf(&buffer, "%s", songs[i]);
+
+        } else {
+
+            asprintf(&buffer, "%s&%s", buffer, songs[i]);
+            if (i + 1 < n_songs && ( strlen(buffer) + strlen(songs[i + 1]) ) >= (256 -3 -(strlen(header) + 1) -strlen(newFrameIncomingMsg)) ) {
+                //The current frame is full, we need to attach a "newFrameIncomingMsg" at the end of the frame, send it, and create a new frame that will
+                asprintf(&buffer, "%s&%s", buffer, newFrameIncomingMsg);
+                sendFrame(0x02, header, buffer, fd_client);
+                free(buffer);
+
+
+                asprintf(&buffer, "%s", songs[i + 1]);
+                i++;
+            }
+
+        }
+    }
+    
+    asprintf(&buffer, "%s&%s", buffer, newFrameNotIncomingMsg);
+    sendFrame(0x02, header, buffer, fd_client);
+    free(buffer);
+
+}
+
+void sendAllPlaylists(/*char** playlists, int n_playlists, int fd_client*/) {
+    //Rewrite all 
+    
+    /*char* buffer;
+
+    char* header;
+
+    asprintf(&header, "PLAYLISTS_RESPONSE&%d", n_playlists);
+
+    char* newFrameIncomingMsg = "NEW_FRAME_INCOMING";
+
+    for (int i = 0; i < n_playlists; i++){
+
+        if (i == 0) {
+
+            asprintf(&buffer, "%s", playlists[i]);
+
+        } else {
+
+            asprintf(&buffer, "%s&%s", buffer, playlists[i]);
+            if (i + 1 < n_playlists && ( strlen(buffer) + strlen(playlists[i + 1]) ) >= (256 -3 -(strlen(header) + 1) -strlen(newFrameIncomingMsg)) ) {
+                //The current frame is full, we need to attach a "newFrameIncomingMsg" at the end of the frame, send it, and create a new frame that will
+                asprintf(&buffer, "%s&%s", buffer, newFrameIncomingMsg);
+                sendFrame(0x02, header, buffer, fd_client);
+                free(buffer);
+            }
+        }
+    }*/
+}
+
 void* runServer(void* arg){
     ClientInfo clientInfo = *((ClientInfo*)arg);
     Frame receive;
@@ -199,15 +269,15 @@ void* runServer(void* arg){
             printx(" requires the list of songs.\n");
 
             //TODO: ParseList()
-            //char** songs = getAllSongs();
+            int n_songs = 0;
+            char** songs = getAllSongs(&n_songs);
+            sendAllSongs(songs, n_songs, clientInfo.fd_client);
 
             printx("Sending song list to ");
             printx(clientInfo.name);
 
-            
 
-            sendFrame(0x02, "SONGS_RESPONSE", "", clientInfo.fd_client);
-        }else if(strcmp(receive.header, "LIST_PLAYLISTS") == 0){
+        } else if(strcmp(receive.header, "LIST_PLAYLISTS") == 0){
              printx("New request – ");
             write(STDOUT_FILENO, clientInfo.name, strlen(clientInfo.name));
             printx("Floyd requires the list of playlists.\n");
@@ -300,7 +370,7 @@ int main (int argc, char** argv) {
 
     printx("Connecting Smyslov Server to the system..\n");
 
-    doDiscoveryHandshake();
+    //doDiscoveryHandshake(); TODO: Uncomment this line
     fd_socket = startServer(server_config.port_poole, server_config.ip_poole);
 
 

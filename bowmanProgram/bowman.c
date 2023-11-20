@@ -92,6 +92,34 @@ int connectToPoole () {
     printx(buffer2);
 }
 
+char** parseReceivedSongs(char* data, int* hasNextFrame, int* num_songs, char** songs){
+    
+   /* WHILE (
+        //FRASEpARSEADA = LEER HASTA &
+        if(fraseParseada = "NEW_FRAME_INCOMING")
+            hasNextFrame = 1;
+            
+        )
+    )*/
+    int endChar;
+    char* token = readStringUntilChar(0, data, '&', &endChar);
+    while (1) {
+        if (strcmp(token,"NEW_FRAME_INCOMING") == 0){
+            *hasNextFrame = 1;
+            break;
+        }else if(strcmp(token,"NEW_FRAME_NOT_INCOMING") == 0){
+            *hasNextFrame = 0;
+            break;
+        }
+        (*num_songs)++;
+        songs = realloc(songs, sizeof(char*) * (*num_songs));
+        songs[(*num_songs) - 1] = strdup(token);
+
+        token = readStringUntilChar(endChar + 1, data, '&', &endChar);
+    }
+    return songs;
+}
+
 // Function to manage user-input commands.
 void enterCommandMode() {
     char* command;
@@ -99,6 +127,10 @@ void enterCommandMode() {
     //TODO: Change this
         int fd_socket; 
         Frame frame;
+
+        int test = 0;
+        int num_songs = 0;
+        char** songs;
         /////////////////////////
     do {
 
@@ -127,10 +159,14 @@ void enterCommandMode() {
                 //TODO: Change this
                 
                 sendFrame(0x02, "LIST_PLAYLISTS", "", fd_socket);
-                frame = receiveFrame(fd_socket);
-                if (strcmp(frame.header, "PLAYLISTS_RESPONSE")){
-                    printEr("Error al listar");
+                while (!test) {
+                    frame = receiveFrame(fd_socket);
+                    songs = parseReceivedSongs(frame.data, &test, &num_songs, songs);
                 }
+                for (int i = 0; i < num_songs; i++) {
+                    printx(songs[i]);
+                }
+                
                 ///////////////////
                 printx("Comanda OK\n");
                 break;

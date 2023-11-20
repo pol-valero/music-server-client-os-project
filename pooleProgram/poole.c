@@ -370,7 +370,7 @@ int main (int argc, char** argv) {
 
     printx("Connecting Smyslov Server to the system..\n");
 
-    //doDiscoveryHandshake(); TODO: Uncomment this line
+    doDiscoveryHandshake();
     fd_socket = startServer(server_config.port_poole, server_config.ip_poole);
 
 

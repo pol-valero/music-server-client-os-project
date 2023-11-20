@@ -149,9 +149,17 @@ void enterCommandMode() {
                 //TODO: disconnectFromPoole();
                 break;
             case LIST_SONGS_CMD:
-                printx("Comanda OK\n");
                 sendFrame(0x02, "LIST_SONGS", "", fd_socket);
-                frame = receiveFrame(fd_socket);
+                
+                //while (!test) {
+                    frame = receiveFrame(fd_socket);
+                    songs = parseReceivedSongs(frame.data, &test, &num_songs, songs);
+                //}
+                for (int i = 0; i < num_songs; i++) {
+                    printx(songs[i]);
+                    printx("\n");
+                }
+
                 //TODO: Create function that receives frame and depending on the header, listens for 
                 //more frames if necessary (if there are a lot of songs)
                 break;
@@ -159,13 +167,7 @@ void enterCommandMode() {
                 //TODO: Change this
                 
                 sendFrame(0x02, "LIST_PLAYLISTS", "", fd_socket);
-                while (!test) {
-                    frame = receiveFrame(fd_socket);
-                    songs = parseReceivedSongs(frame.data, &test, &num_songs, songs);
-                }
-                for (int i = 0; i < num_songs; i++) {
-                    printx(songs[i]);
-                }
+                
                 
                 ///////////////////
                 printx("Comanda OK\n");

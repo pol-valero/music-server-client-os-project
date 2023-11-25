@@ -10,12 +10,13 @@ typedef struct {
 
 PooleInfo poole_info;
 
-int fd_config;
-
 ClientConfig client_config; //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
 
+int fd_config;
+
+char* buffer;
+
 void printInitMsg() {
-    char* buffer;
     int buffSize;
 
     buffSize = asprintf(&buffer, "\n%s user initialized\n", client_config.name);
@@ -24,7 +25,6 @@ void printInitMsg() {
 }
 
 void printConnectionInitMsg() {
-    char* buffer;
     int buffSize;
 
     buffSize = asprintf(&buffer, "\n%s connected to HAL 9000 system, welcome music lover!\n", client_config.name);
@@ -50,7 +50,6 @@ int connectToPoole () {
     sendFrame(0x01, "NEW_BOWMAN", client_config.name, fd_socket);
     
     Frame responseFrame = receiveFrame(fd_socket);
-
 
     if (frameIsValid(responseFrame)) {
 
@@ -87,6 +86,7 @@ int connectToPoole () {
 
     return -1;
 
+    //TODO: Remove below lines
     char buffer2[100];
     sprintf(buffer2, "%d %d %s %s", responseFrame.type, responseFrame.header_length, responseFrame.header, responseFrame.data);
     printx(buffer2);
@@ -146,10 +146,11 @@ void enterCommandMode() {
                 break;
             case LOGOUT_CMD:
                 printx("Comanda OK\n");
+                sendFrame(0x06, EXIT, client_config.name, fd_socket);
                 //TODO: disconnectFromPoole();
                 break;
             case LIST_SONGS_CMD:
-                sendFrame(0x02, "LIST_SONGS", "", fd_socket);
+                sendFrame(0x02, LIST_SONGS, "", fd_socket);
                 
                 //while (!test) {
                     frame = receiveFrame(fd_socket);
@@ -205,13 +206,13 @@ void enterCommandMode() {
 
 // Handle unexpected termination scenarios.
 void terminateExecution () {
-
-
     free(client_config.name);
     free(client_config.files_folder);
     free(client_config.ip_discovery);
 
-    close (fd_config);
+    if (fd_config != NULL){
+        close (fd_config);
+    }
 
     signal(SIGINT, SIG_DFL);
     raise(SIGINT);
@@ -241,6 +242,8 @@ int main (int argc, char** argv) {
     } else {
         client_config = readConfigFile(fd_config);
     }
+    close(fd_config);
+    fd_config = NULL;
 
     //printConfigFile(client_config);
 

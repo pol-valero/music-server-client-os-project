@@ -31,7 +31,7 @@ int doDiscoveryHandshake() {
 
     if (fd_socket < 0) {
         printEr("ERROR: Cannot connect to the discovery server\n");
-        return -1;
+        return 0;
     }
 
     asprintf(&buffer, "%s&%s&%d", server_config.name, server_config.ip_poole, server_config.port_poole);
@@ -42,18 +42,21 @@ int doDiscoveryHandshake() {
 
     Frame responseFrame = receiveFrame(fd_socket);
 
+    if(!strcmp(responseFrame.header, RESPONSE_OK)){
+        printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");
+        printx("\nWaiting for connections...\n\n");
 
-    if(strcmp(responseFrame.header, RESPONSE_OK)){
-        return -1;
-    }else if(strcmp(responseFrame.header, RESPONSE_KO)){
-        printEr("\n");
-        return -1;
+        return 1;
+    }else if(!strcmp(responseFrame.header, RESPONSE_KO)){
+        printEr("Discovery refused the connection\n");
+    }else if (!strcmp(responseFrame.header, UNKNOWN)){
+        printEr("Error: last packet sent was lost\n");
+    }else{
+        printEr("Error: Error receiving package\n");
+        sendFrame(0x02, UNKNOWN, "", fd_socket);
     }
-        
-    printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");
-    printx("\nWaiting for connections...\n\n");
 
-    return 1;
+    return 0;
 }
 
 // Handle unexpected termination scenarios.
@@ -71,9 +74,6 @@ void terminateExecution () {
         }
         free(Clients.clientInfo);
     }
-    
-    
-    
 
     close (fd_config);
 
@@ -111,8 +111,9 @@ void disconect(int fd_client){
     if (Clients.numClients > 0){
         for (int i = 0; i < Clients.numClients; i++){
             if (Clients.clientInfo[i].fd_client == fd_client){
-                for (int j = i; j < Clients.numClients ; j++) {
-                    Clients.clientInfo[i].fd_client = Clients.clientInfo[i + 1].fd_client;
+                free(Clients.clientInfo[i].name);
+                for (int j = i; j < Clients.numClients - 1; j++) {
+                    Clients.clientInfo[j].fd_client = Clients.clientInfo[j + 1].fd_client;
                 }
                 (Clients.numClients)--;
                 Clients.clientInfo = realloc(Clients.clientInfo, sizeof(ClientInfo) * (Clients.numClients));
@@ -289,13 +290,13 @@ void* runServer(void* arg){
 
             disconect(clientInfo.fd_client);
 
-            asprintf(&buffer, "User -%s- disconnected\n", receive.data);
+            asprintf(&buffer, "User -%s- disconnected\n\n", receive.data);
             printRes(buffer);
             free(buffer);
         }else if (!strcmp(receive.header, UNKNOWN)){
-            printEr("Error: Error al enviar el ultimo paquete\n");
+            printEr("Error: last packet sent was lost\n");
         }else{
-            printEr("Error: Error al recibir paquete");
+            printEr("Error: Error receiving package\n");
             sendFrame(0x02, UNKNOWN, "", clientInfo.fd_client);
         }
     } while (strcmp(receive.header, EXIT));
@@ -372,18 +373,12 @@ int main (int argc, char** argv) {
     printx("Reading configuration file\n");
     server_config = readConfigFile(fd_config);
 
-    //TODO:  REMOVE THESE LINES, THEY ARE JUST FOR TESTING
-
-    //printListString();
-
-    ///////////////////
-
     printx("Connecting Smyslov Server to the system..\n");
 
     int result = doDiscoveryHandshake();
     fd_socket = startServer(server_config.port_poole, server_config.ip_poole);
 
-    if (fd_socket != -1 && result != -1){
+    if (fd_socket != -1 && result){
         while (1){
             addClient();
         }

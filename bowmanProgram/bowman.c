@@ -210,13 +210,10 @@ void terminateExecution () {
     free(client_config.files_folder);
     free(client_config.ip_discovery);
 
-    if (fd_config != NULL){
-        close (fd_config);
-    }
+    close (fd_config);    
 
     signal(SIGINT, SIG_DFL);
     raise(SIGINT);
-
 }
 
 //main function :P
@@ -242,8 +239,6 @@ int main (int argc, char** argv) {
     } else {
         client_config = readConfigFile(fd_config);
     }
-    close(fd_config);
-    fd_config = NULL;
 
     //printConfigFile(client_config);
 

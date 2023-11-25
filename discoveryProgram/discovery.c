@@ -107,7 +107,7 @@ void handlePooleFrameType(Frame frame, int fd_client, PooleStatsList* list) {
         case 0x01:
             //New connection
             {
-            sendFrame(0x01, "CON_OK", "", fd_client);
+            sendFrame(0x01, RESPONSE_OK, "", fd_client);
              
             PooleStats poole_stats = createPooleStats(frame);
 
@@ -154,7 +154,7 @@ void* listenForPooleConnections(void* arg) {
 
         } else {
             //sendFrame(0x01, "CON_KO", "", fd_client);
-            sendFrame(0x07, "UNKNOWN", "", fd_client);
+            sendFrame(0x07, UNKNOWN, "", fd_client);
         }
 
         free(frame.header);
@@ -175,7 +175,7 @@ void handleBowmanFrameType(Frame frame, int fd_client, PooleStatsList* list) {
             char* buffer;
             asprintf(&buffer, "%s&%s&%d", poole_min_conn.name, poole_min_conn.ip, poole_min_conn.port);
 
-            sendFrame(0x01, "CON_OK", buffer, fd_client);
+            sendFrame(0x01, RESPONSE_OK, buffer, fd_client);
 
             free(buffer);
             }
@@ -214,14 +214,14 @@ void* listenForBowmanConnections(void* arg) {
         if (frameIsValid(frame)) {
             
             if ((*list).n_poole_stats == 0) {
-                sendFrame(0x01, "CON_KO", "", fd_client); 
+                sendFrame(0x01, RESPONSE_KO, "", fd_client); 
             } else {
                 handleBowmanFrameType(frame, fd_client, list);
             }
 
         } else {
 
-            sendFrame(0x07, "UNKNOWN", "", fd_client);
+            sendFrame(0x07, UNKNOWN, "", fd_client);
 
         }
 

@@ -178,8 +178,6 @@ int startServerConnection(char* ip, int port) {
 
 }
 
-
-
 // Read characters until reaching either endChar or endChar2. If endChar2 is found, set endChar2Found to 1.
 char* readUntilEitherChar(int fd, char endChar, char endChar2, int* endChar2Found) {
     int size;

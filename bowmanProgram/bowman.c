@@ -8,6 +8,19 @@ typedef struct {
     int port;
 } PooleInfo;
 
+typedef struct {
+    char* name;
+    char** songs;
+    int numSongs;
+} PlayList;
+
+typedef struct {
+    PlayList* playList;
+    int numPlayList;
+} PlayLists;
+
+PlayLists playLists = { NULL, 0 };
+
 PooleInfo poole_info;
 
 ClientConfig client_config; //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
@@ -93,21 +106,13 @@ int connectToPoole () {
 }
 
 char** parseReceivedSongs(char* data, int* hasNextFrame, int* num_songs, char** songs){
-    
-   /* WHILE (
-        //FRASEpARSEADA = LEER HASTA &
-        if(fraseParseada = "NEW_FRAME_INCOMING")
-            hasNextFrame = 1;
-            
-        )
-    )*/
     int endChar;
     char* token = readStringUntilChar(0, data, '&', &endChar);
     while (1) {
-        if (strcmp(token,"NEW_FRAME_INCOMING") == 0){
+        if (strcmp(token,"1") == 0){
             *hasNextFrame = 1;
             break;
-        }else if(strcmp(token,"NEW_FRAME_NOT_INCOMING") == 0){
+        }else if(strcmp(token,"0") == 0){
             *hasNextFrame = 0;
             break;
         }
@@ -119,6 +124,51 @@ char** parseReceivedSongs(char* data, int* hasNextFrame, int* num_songs, char** 
     }
     return songs;
 }
+void updatePlaylist(const char *playlistName) {
+    playLists.numPlayList++;
+    playLists.playList = realloc(playLists.playList, sizeof(PlayList) * playLists.numPlayList);
+
+    playLists.playList[playLists.numPlayList - 1].name = strdup(playlistName);
+    playLists.playList[playLists.numPlayList - 1].songs = NULL;
+    playLists.playList[playLists.numPlayList - 1].numSongs = 0;
+}
+
+void updateSong(const char *SongName) {
+    playLists.playList[playLists.numPlayList - 1].numSongs++;
+
+    playLists.playList[playLists.numPlayList - 1].songs = realloc(
+        playLists.playList[playLists.numPlayList - 1].songs,
+        sizeof(char*) * playLists.playList[playLists.numPlayList - 1].numSongs
+    );
+
+    playLists.playList[playLists.numPlayList - 1].songs[playLists.playList[playLists.numPlayList - 1].numSongs - 1] = strdup(SongName);
+}
+
+void parseReceivedPlayList(int fd){
+    Frame frame;
+    char* token;
+    int first = 1;
+
+    do{
+        frame = receiveFrame(fd);
+        printx(frame.data);
+        printx("\n");
+        token = strtok(frame.data, "&");
+
+        while (strcmp(token,"0") || strcmp(token,"1")) {
+            printx(token);
+            printx("\n");
+            if (token[0] == '#' || first){
+                updatePlaylist(token);
+                first = 0;
+            }else{
+                updateSong(token);
+            }
+
+            token = strtok(NULL, "&");
+        }
+    }while (strcmp(token,"0"));
+}
 
 // Function to manage user-input commands.
 void enterCommandMode() {
@@ -128,9 +178,9 @@ void enterCommandMode() {
         int fd_socket; 
         Frame frame;
 
-        int test = 0;
+        int hasNextFrame = 1;
         int num_songs = 0;
-        char** songs;
+        char** songs = NULL;
         /////////////////////////
     do {
 
@@ -152,22 +202,38 @@ void enterCommandMode() {
             case LIST_SONGS_CMD:
                 sendFrame(0x02, LIST_SONGS, "", fd_socket);
                 
-                //while (!test) {
+                //TODO: CONTROL THE HEADER and free the variables
+                while (hasNextFrame) {
                     frame = receiveFrame(fd_socket);
-                    songs = parseReceivedSongs(frame.data, &test, &num_songs, songs);
-                //}
+                    songs = parseReceivedSongs(frame.data, &hasNextFrame, &num_songs, songs);
+                }
+                //TODO: SOLVE THE PRINT
                 for (int i = 0; i < num_songs; i++) {
                     printx(songs[i]);
                     printx("\n");
                 }
 
-                //TODO: Create function that receives frame and depending on the header, listens for 
-                //more frames if necessary (if there are a lot of songs)
                 break;
             case LIST_PLAYLISTS_CMD:
-                //TODO: Change this
+                //TODO: Change this and free the variables
                 
-                sendFrame(0x02, "LIST_PLAYLISTS", "", fd_socket);
+                sendFrame(0x02, LIST_PLAYLISTS, "", fd_socket);
+
+                parseReceivedPlayList(fd_socket);
+
+                //TODO: SOLVE THE PRINT
+                
+                asprintf(&buffer, "There are %d lists available for download:\n",playLists.numPlayList);
+                printx(buffer);
+                for (int i = 0; i < playLists.numPlayList ; i++){
+                    asprintf(&buffer, "%d. %s\n",i + 1 ,playLists.playList[i].name);
+                    printx(buffer);
+                    for (int j = 0; j < playLists.playList[i].numSongs; j++){
+                        asprintf(&buffer, "\t%c. %s\n",j + 'a' ,playLists.playList[i].songs[j]);
+                        printx(buffer);
+                    }
+                }
+                free (buffer);
                 
                 
                 ///////////////////

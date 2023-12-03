@@ -90,5 +90,7 @@ void printQue(char* message);
 
 void printRes(char* message);
 
+void cleanFrame(Frame* frame);
+
 
 #endif

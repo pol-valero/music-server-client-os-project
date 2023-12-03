@@ -297,3 +297,14 @@ void printRes(char *message) {
     write(STDOUT_FILENO, message, strlen(message));
     write(STDOUT_FILENO, ANSI_COLOR_RESET, strlen(ANSI_COLOR_RESET));
 }
+
+void cleanFrame(Frame* frame) {
+    if (frame->header != NULL){
+        free(frame->header);
+        frame->header = NULL;
+    }
+    if (frame->data != NULL){
+        free(frame->data);
+        frame->data = NULL;
+    }
+}

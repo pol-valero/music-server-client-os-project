@@ -25,6 +25,8 @@ PooleInfo poole_info;
 
 ClientConfig client_config; //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
 
+Frame receive;
+
 int fd_config;
 
 char* buffer;
@@ -45,15 +47,15 @@ void printConnectionInitMsg() {
     free(buffer);
 }
 
-PooleInfo frameToPooleInfo (Frame frame) {
+PooleInfo frameToPooleInfo () {
 
     PooleInfo poole_info;
 
     int endCharPos;
     
-    poole_info.name = readStringUntilChar(0, frame.data, '&', &endCharPos);
-    poole_info.ip = readStringUntilChar(endCharPos + 1, frame.data, '&', &endCharPos);
-    poole_info.port = atoi(readStringUntilChar(endCharPos + 1, frame.data, ' ', &endCharPos)); //Does not matter the endChar we put here
+    poole_info.name = readStringUntilChar(0, receive.data, '&', &endCharPos);
+    poole_info.ip = readStringUntilChar(endCharPos + 1, receive.data, '&', &endCharPos);
+    poole_info.port = atoi(readStringUntilChar(endCharPos + 1, receive.data, ' ', &endCharPos)); //Does not matter the endChar we put here
 
     return poole_info;
 }
@@ -62,22 +64,24 @@ int connectToPoole () {
     int fd_socket = startServerConnection(client_config.ip_discovery, client_config.port_discovery);
     sendFrame(0x01, "NEW_BOWMAN", client_config.name, fd_socket);
     
-    Frame responseFrame = receiveFrame(fd_socket);
+    cleanFrame(&receive);
+    receive = receiveFrame(fd_socket);
 
-    if (frameIsValid(responseFrame)) {
+    if (frameIsValid(receive)) {
 
-        if (strcmp(responseFrame.header, "CON_OK") == 0) {
+        if (strcmp(receive.header, "CON_OK") == 0) {
             close (fd_socket);
-            poole_info = frameToPooleInfo(responseFrame);
+            poole_info = frameToPooleInfo(receive);
 
             fd_socket = startServerConnection(poole_info.ip, poole_info.port);
             sendFrame(0x01, "NEW_BOWMAN", client_config.name, fd_socket);
 
-            responseFrame = receiveFrame(fd_socket);
+            cleanFrame(&receive);
+            receive = receiveFrame(fd_socket);
 
-            if (frameIsValid(responseFrame)) {
+            if (frameIsValid(receive)) {
 
-                if (strcmp(responseFrame.header, "CON_OK") == 0) {
+                if (strcmp(receive.header, "CON_OK") == 0) {
                     printConnectionInitMsg();
                     return fd_socket;
                 } else {
@@ -98,11 +102,6 @@ int connectToPoole () {
     }
 
     return -1;
-
-    //TODO: Remove below lines
-    char buffer2[100];
-    sprintf(buffer2, "%d %d %s %s", responseFrame.type, responseFrame.header_length, responseFrame.header, responseFrame.data);
-    printx(buffer2);
 }
 
 char** parseReceivedSongs(char* data, int* hasNextFrame, int* num_songs, char** songs){
@@ -145,29 +144,35 @@ void updateSong(const char *SongName) {
 }
 
 void parseReceivedPlayList(int fd){
-    Frame frame;
     char* token;
-    int first = 1;
-
-    do{
-        frame = receiveFrame(fd);
-        printx(frame.data);
-        printx("\n");
-        token = strtok(frame.data, "&");
-
-        while (strcmp(token,"0") || strcmp(token,"1")) {
-            printx(token);
-            printx("\n");
-            if (token[0] == '#' || first){
+    int status = 2;
+    
+    while (status != 0){
+        cleanFrame(&receive);
+        receive = receiveFrame(fd);
+        token = strtok(receive.data, "&");
+        while (strcmp(token,"0") && strcmp (token,"1") && strcmp (token,"2")) {
+            if (strchr(token, '#')){
+                char *saveptr;
+                char *songToken = strtok_r(token, "#", &saveptr);
+                updateSong(songToken);
+                char *playlistToken = strtok_r(NULL, "#", &saveptr);
+                if (playlistToken != NULL) {
+                    updatePlaylist(playlistToken);
+                }
+            }else if(status == 2){
                 updatePlaylist(token);
-                first = 0;
+                status = -1;
             }else{
                 updateSong(token);
             }
 
             token = strtok(NULL, "&");
+            if (!strcmp(token,"0") || !strcmp (token,"1") || !strcmp (token,"2")){
+                status = atoi(token);
+            }
         }
-    }while (strcmp(token,"0"));
+    }
 }
 
 // Function to manage user-input commands.
@@ -176,7 +181,6 @@ void enterCommandMode() {
     int command_case_num;
     //TODO: Change this
         int fd_socket; 
-        Frame frame;
 
         int hasNextFrame = 1;
         int num_songs = 0;
@@ -204,8 +208,9 @@ void enterCommandMode() {
                 
                 //TODO: CONTROL THE HEADER and free the variables
                 while (hasNextFrame) {
-                    frame = receiveFrame(fd_socket);
-                    songs = parseReceivedSongs(frame.data, &hasNextFrame, &num_songs, songs);
+                    cleanFrame(&receive);
+                    receive = receiveFrame(fd_socket);
+                    songs = parseReceivedSongs(receive.data, &hasNextFrame, &num_songs, songs);
                 }
                 //TODO: SOLVE THE PRINT
                 for (int i = 0; i < num_songs; i++) {
@@ -235,9 +240,6 @@ void enterCommandMode() {
                 }
                 free (buffer);
                 
-                
-                ///////////////////
-                printx("Comanda OK\n");
                 break;
             case DOWNLOAD_SONG_CMD:
                 printx("Comanda OK\n");

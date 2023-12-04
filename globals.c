@@ -308,3 +308,4 @@ void cleanFrame(Frame* frame) {
         frame->data = NULL;
     }
 }
+

@@ -69,13 +69,14 @@ int loadSongs(const int fd_dir) {
     int fd;
 
     if (fchdir(fd_dir) < 0) {
-        perror("fchdir");
+        printEr("Error: Cannot change directory\n");
         return -1;
     }
+
     close(fd_dir);
 
     if ((dirp = opendir(".")) == NULL) {
-        perror("opendir");
+        printEr("Error: Cannot open directory\n");
         return -2;
     }
 
@@ -103,15 +104,6 @@ int loadSongs(const int fd_dir) {
     return 0;
 }
 
-//TODO: Remove this function
-void printTest(){
-    for (int i = 0; i < playLists.numPlayList ; i++){
-        for (int j = 0; j < playLists.playList[i].numSongs; j++){
-            printx(playLists.playList[i].songs[j]);
-        }
-    }
-}
-
 void freePlayList(PlayList* playlist) {
     free(playlist->name);
     free(playlist->path);
@@ -125,12 +117,13 @@ void freePlayList(PlayList* playlist) {
 
 // Handle unexpected termination scenarios.
 void terminateExecution () {
-
+    //Free the memory allocated for the server_config
     free(server_config.name);
     free(server_config.files_folder);
     free(server_config.ip_discovery);
     free(server_config.ip_poole);
 
+    //Free the memory allocated for the clients
     if (Clients.numClients > 0){
         for (int i = 0; i < Clients.numClients; i++){
             free(Clients.clientInfo[i].name);
@@ -141,6 +134,7 @@ void terminateExecution () {
 
     close (fd_config);
 
+    //Free the memory allocated for the playLists
     if (playLists.numPlayList > 0){
         for (int i = 0; i < playLists.numPlayList; i++) {
             freePlayList(&(playLists.playList[i]));
@@ -148,6 +142,7 @@ void terminateExecution () {
         free(playLists.playList);
     }
     
+    //clean the frame
     cleanFrame(&receive);
 
     signal(SIGINT, SIG_DFL);
@@ -172,7 +167,7 @@ void disconect(int fd_client){
         free(Clients.clientInfo);
     }
     
-    sendFrame(0x06, "CONOK", "", fd_client);
+    sendFrame(0x06, RESPONSE_OK, "", fd_client);
     close(fd_client);
 }
 
@@ -181,16 +176,26 @@ void sendAllSongs(int fd_client) {
         sendFrame(0x02, SONGS_RESPONSE, "NO_HAY_CANCIONES&0", fd_client);
         return;
     }
-    asprintf(&buffer, "%s", playLists.playList[0].songs[0]);
+    int first = 1;
 
-    for (int i = 0; i < playLists.numPlayList ; i++){
+    char *tempBuffer;
+    asprintf(&buffer, "test");
+    for (int i = 0; i < playLists.numPlayList; i++){
         for (int j = 0; j < playLists.playList[i].numSongs; j++){
             if (strlen(buffer) + strlen(playLists.playList[i].songs[j]) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
-                asprintf(&buffer, "%s&%s", buffer, playLists.playList[i].songs[j]);
+                if (first){
+                    free(buffer);
+                    asprintf(&buffer, "%s", playLists.playList[i].songs[j]);
+                    first = 0;
+                }else{
+                    asprintf(&tempBuffer, "%s&%s", buffer, playLists.playList[i].songs[j]);
+                    free(buffer);
+                    buffer = tempBuffer;
+                }
             }else{
-                //The current frame is full, we need to attach a "newFrameIncomingMsg" at the end of the frame, send it, and create a new frame that will
-
-                asprintf(&buffer, "%s&1", buffer);
+                asprintf(&tempBuffer, "%s&1", buffer);
+                free(buffer); 
+                buffer = tempBuffer; 
                 sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
                 free(buffer);
 
@@ -198,8 +203,9 @@ void sendAllSongs(int fd_client) {
             }
         }
     }
-    
-    asprintf(&buffer, "%s&0", buffer);
+    asprintf(&tempBuffer, "%s&0", buffer);
+    free(buffer); 
+    buffer = tempBuffer;
     sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
     free(buffer);
 }
@@ -209,34 +215,49 @@ void sendAllPlaylists(int fd_client) {
         sendFrame(0x02, SONGS_RESPONSE, "NO_HAY_CANCIONES&0", fd_client);
         return;
     }
+    int first = 1;
     asprintf(&buffer, "%s", playLists.playList[0].name);
 
-    for (int i = 1; i < playLists.numPlayList ; i++){
+    char* tempBuffer;
+    for (int i = 0; i < playLists.numPlayList; i++){
+        if (!first){
+            if (strlen(buffer) + strlen(playLists.playList[i].name) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
+                asprintf(&tempBuffer, "%s#%s", buffer, playLists.playList[i].name);
+                free(buffer);
+                buffer = tempBuffer;
+            }else{
+                asprintf(&tempBuffer, "%s&2", buffer);
+                free(buffer);
+                buffer = tempBuffer;
+                sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
+                free(buffer);
+                
+                asprintf(&buffer, "%s", playLists.playList[i].name);
+            }
+        }else{
+            first = 0;
+        }
         for (int j = 0; j < playLists.playList[i].numSongs; j++){
             if (strlen(buffer) + strlen(playLists.playList[i].songs[j]) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
-                asprintf(&buffer, "%s&%s", buffer, playLists.playList[i].songs[j]);
+                asprintf(&tempBuffer, "%s&%s", buffer, playLists.playList[i].songs[j]);
+                free(buffer);
+                buffer = tempBuffer;
             }else{
-                //The current frame is full, we need to attach a "newFrameIncomingMsg" at the end of the frame, send it, and create a new frame that will
-                asprintf(&buffer, "%s&1", buffer);
+                asprintf(&tempBuffer, "%s&1", buffer);
+                free(buffer);
+                buffer = tempBuffer;
                 sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
                 free(buffer);
 
                 asprintf(&buffer, "%s", playLists.playList[i].songs[j]);
             }
         }
-        if (strlen(buffer) + strlen(playLists.playList[i].name) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
-            asprintf(&buffer, "%s#%s", buffer, playLists.playList[i].name);
-        }else{
-            //The current frame is full, we need to attach a "newFrameIncomingMsg" at the end of the frame, send it, and create a new frame that will
-            asprintf(&buffer, "%s&2", buffer);
-            sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
-            free(buffer);
-            
-            asprintf(&buffer, "%s#%s", buffer, playLists.playList[i].name);
-        }
+        
     }
     
-    asprintf(&buffer, "%s&0", buffer);
+    asprintf(&tempBuffer, "%s&0", buffer);
+    free(buffer);
+    buffer = tempBuffer;
     sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
     free(buffer);
 }
@@ -306,7 +327,7 @@ void configureClient(int fd_temp){
 
     sendFrame(0x01, RESPONSE_OK, "", fd_temp);
     
-    asprintf(&buffer, "New user connected: %s\n", receive.data);
+    asprintf(&buffer, "New user connected: %s\n", Clients.clientInfo[index].name);
     printx(buffer);
     free(buffer);
 }
@@ -317,7 +338,7 @@ void addClient(){
 
     int fd_temp = accept(fd_socket, (void *) &c_addr, &c_len);
     if (fd_temp == -1){
-        printEr("ERROR: Problemas al acceptar client");
+        printEr("ERROR: Problemas al acceptar client\n");
         return;
     }
     cleanFrame(&receive);
@@ -328,7 +349,7 @@ void addClient(){
     }else{
         sendFrame(0x07, UNKNOWN, "", fd_temp);
         close(fd_temp);
-        printEr("Error: Problemas al acceptar un cliente.");
+        printEr("Error: Problemas al acceptar un cliente.\n");
     }
 }
 
@@ -343,7 +364,7 @@ int doDiscoveryHandshake() {
 
     asprintf(&buffer, "%s&%s&%d", server_config.name, server_config.ip_poole, server_config.port_poole);
 
-    sendFrame(0x01, "NEW_POOLE", buffer, fd_socket);
+    sendFrame(0x01, POOLE_TO_DISCOVERY, buffer, fd_socket);
 
     free(buffer);
 

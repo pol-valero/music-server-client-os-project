@@ -21,14 +21,25 @@
 #define OK 1
 #define KO 0
 
+#define PATH "pooleProgram/data"
+
 // ANSI escape codes for text formatting
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 #define ANSI_COLOR_BLUE "\x1b[34m"
 #define ANSI_COLOR_GREEN "\x1b[32m"
 
+//Macros
 #define printx(x) write(1, x, strlen(x))
 #define printEr(x) write(1, ANSI_COLOR_RED x ANSI_COLOR_RESET, strlen(ANSI_COLOR_RED x ANSI_COLOR_RESET))
+#define cleanPointer(ptr) do { \
+    free(ptr); \
+    ptr = NULL; \
+} while(0);
+#define cleanSockets(socket) do { \
+    close(socket); \
+    socket = -1; \
+} while(0);
 
 //Frame Headers (Query)
 #define POOLE_TO_DISCOVERY "NEW_POOLE"

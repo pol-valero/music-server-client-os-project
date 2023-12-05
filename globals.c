@@ -132,7 +132,7 @@ int startServer(int port, char *ip) {
     if (bind (fd_socket, (void *)&socket_addr, sizeof(socket_addr)) < 0) {
         printEr("ERROR binding port\n");
 
-        close(fd_socket);
+        cleanSockets(fd_socket);
 
         return -1;
     }
@@ -166,7 +166,7 @@ int startServerConnection(char* ip, int port) {
             
             asprintf(&buffer, "Connection error with the server: %s\n", strerror(errno));
             printx(buffer);
-            close(socket_conn);
+            cleanSockets(socket_conn);
             free(buffer);
 
             return -1;

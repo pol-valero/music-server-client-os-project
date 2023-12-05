@@ -40,3 +40,15 @@ void printConfigFile(ClientConfig client_config) {
     printDynStr(buffer, buffSize);
     free(buffer);
 }
+
+void cleanClientConfig(ClientConfig* client_config) {
+    if (client_config->name != NULL){
+        cleanPointer(client_config->name);
+    }
+    if (client_config->files_folder != NULL){
+        cleanPointer(client_config->files_folder);
+    }
+    if (client_config->ip_discovery != NULL){
+        cleanPointer(client_config->ip_discovery);
+    }
+}

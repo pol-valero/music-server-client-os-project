@@ -4,8 +4,11 @@
 #include "sys/select.h"
 #include <dirent.h>
 
-#define PATH "pooleProgram/data"
-
+/**
+ * 
+ * Structs
+ * 
+ */
 typedef struct {
     pthread_t threadClient;
     int fd_client;
@@ -29,18 +32,37 @@ typedef struct {
     int numPlayList;
 } PlayLists;
 
-ClientsSockets Clients;
+/**
+ * 
+ * Global variables
+ * 
+ */
 
-ServerConfig server_config; //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
+ClientsSockets Clients = { NULL, 0 };
+
+ServerConfig server_config = { NULL, NULL, NULL, 0, NULL, 0 };
 
 PlayLists playLists = { NULL, 0 };  
 
 Frame receive = { 0, 0, NULL, NULL };
 
-int fd_config;
-int fd_socket;
-
 char* buffer;
+
+/**
+ * 
+ * Sockets file descriptors
+ * 
+ */
+
+int fd_config = -1;
+
+int fd_socket = -1;
+
+/**
+ * 
+ * Functions for load data of songs
+ * 
+ */
 
 void updatePlaylist(const char *playlistName) {
     playLists.numPlayList++;
@@ -115,25 +137,7 @@ void freePlayList(PlayList* playlist) {
     free(playlist->songs);
 }
 
-// Handle unexpected termination scenarios.
-void terminateExecution () {
-    //Free the memory allocated for the server_config
-    free(server_config.name);
-    free(server_config.files_folder);
-    free(server_config.ip_discovery);
-    free(server_config.ip_poole);
-
-    //Free the memory allocated for the clients
-    if (Clients.numClients > 0){
-        for (int i = 0; i < Clients.numClients; i++){
-            free(Clients.clientInfo[i].name);
-            close(Clients.clientInfo[i].fd_client);
-        }
-        free(Clients.clientInfo);
-    }
-
-    close (fd_config);
-
+void cleanPlayLists() {
     //Free the memory allocated for the playLists
     if (playLists.numPlayList > 0){
         for (int i = 0; i < playLists.numPlayList; i++) {
@@ -141,13 +145,13 @@ void terminateExecution () {
         }
         free(playLists.playList);
     }
-    
-    //clean the frame
-    cleanFrame(&receive);
+} 
 
-    signal(SIGINT, SIG_DFL);
-    raise(SIGINT);
-}
+/**
+ * 
+ * Functions for disconect client
+ * 
+ */
 
 void disconect(int fd_client){
     if (Clients.numClients > 0){
@@ -168,8 +172,14 @@ void disconect(int fd_client){
     }
     
     sendFrame(0x06, RESPONSE_OK, "", fd_client);
-    close(fd_client);
+    cleanSockets(fd_client);
 }
+
+/**
+ * 
+ * Functions for send all songs.
+ * 
+ */
 
 void sendAllSongs(int fd_client) {
     if (playLists.numPlayList == 0 || playLists.playList[0].numSongs == 0){
@@ -209,6 +219,12 @@ void sendAllSongs(int fd_client) {
     sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
     free(buffer);
 }
+
+/**
+ * 
+ * Functions for send all playlists.
+ * 
+ */
 
 void sendAllPlaylists(int fd_client) {
     if (playLists.numPlayList == 0 || playLists.playList[0].numSongs == 0){
@@ -262,6 +278,11 @@ void sendAllPlaylists(int fd_client) {
     free(buffer);
 }
 
+/**
+ * 
+ * Functions manage the client petitions
+ * 
+ */
 
 void* runServer(void* arg){
     ClientInfo clientInfo = *((ClientInfo*)arg);
@@ -309,6 +330,12 @@ void* runServer(void* arg){
     return NULL;
 }
 
+/**
+ * 
+ * Functions for configure the client
+ * 
+ */
+
 void configureClient(int fd_temp){
     int index = Clients.numClients;
         
@@ -348,11 +375,16 @@ void addClient(){
         configureClient(fd_temp);
     }else{
         sendFrame(0x07, UNKNOWN, "", fd_temp);
-        close(fd_temp);
+        cleanSockets(fd_temp);
         printEr("Error: Problemas al acceptar un cliente.\n");
     }
 }
 
+/**
+ * 
+ * Functions for connect to the discovery server
+ * 
+ */
 
 int doDiscoveryHandshake() {
     int fd_socket = startServerConnection(server_config.ip_discovery, server_config.port_discovery);
@@ -383,6 +415,34 @@ int doDiscoveryHandshake() {
     }
 
     return 0;
+}
+void cleanClientInfo(){
+    if (Clients.numClients > 0){
+        for (int i = 0; i < Clients.numClients; i++){
+            free(Clients.clientInfo[i].name);
+            cleanSockets(Clients.clientInfo[i].fd_client);
+        }
+        free(Clients.clientInfo);
+    }
+}
+
+// Handle unexpected termination scenarios.
+void terminateExecution () {
+    //Free the memory allocated for the server_config
+    cleanServerConfig(&server_config);
+    cleanFrame(&receive);
+    cleanClientInfo();
+    cleanPlayLists();
+
+    if(fd_socket != -1){
+        cleanSockets(fd_socket);
+    }
+    if(fd_config != -1){
+        cleanSockets(fd_config);
+    }
+
+    signal(SIGINT, SIG_DFL);
+    raise(SIGINT);
 }
 
 //main function :p

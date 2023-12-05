@@ -2,6 +2,11 @@
 #include "bowmanConfig.h"
 #include "bowmanCmdProcessing.h"
 
+/**
+ * 
+ * Structs
+ * 
+ */
 typedef struct {
     char* name;
     char* ip;
@@ -19,49 +24,62 @@ typedef struct {
     int numPlayList;
 } PlayLists;
 
+typedef struct {
+    char** songs;
+    int numSongs;
+}Songs;
+
+/**
+ * 
+ * Global variables
+ * 
+ */
 PlayLists playLists = { NULL, 0 };
 
-PooleInfo poole_info;
+Songs songs = { NULL, 0};
 
-ClientConfig client_config; //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
+PooleInfo poole_info = { NULL, NULL, 0 };
 
-Frame receive;
+ClientConfig client_config = { NULL, NULL, NULL, 0};
 
-int fd_config;
+Frame receive = { 0, 0, NULL, NULL };
+
+char* buffer = NULL;
+
+/**
+ * 
+ * Sockets file descriptors
+ * 
+ */
+int fd_config = -1;
+
 int fd_socket = -1; 
 
-char* buffer;
-
-void cleanPlayLists() {
-    if(playLists.playList == 0) {
-        return;
-    }
-    for (int i = 0; i < playLists.numPlayList; i++) {
-        free(playLists.playList[i].name);
-        for (int j = 0; j < playLists.playList[i].numSongs; j++) {
-            free(playLists.playList[i].songs[j]);
-        }
-        free(playLists.playList[i].songs);
-    }
-    free(playLists.playList);
-    playLists.playList = NULL;
-    playLists.numPlayList = 0;
-}
-
-void printInitMsg() {
-    int buffSize;
-
-    buffSize = asprintf(&buffer, "\n%s user initialized\n", client_config.name);
-    printDynStr(buffer, buffSize);
-    free(buffer);
-}
+/**
+ * 
+ * Print functions
+ * 
+ */
 
 void printConnectionInitMsg() {
-    int buffSize;
+    asprintf(&buffer, "%s connected to HAL 9000 system, welcome music lover!\n", client_config.name);
+    printx(buffer);
+    cleanPointer(buffer);
+}
 
-    buffSize = asprintf(&buffer, "%s connected to HAL 9000 system, welcome music lover!\n", client_config.name);
-    printDynStr(buffer, buffSize);
-    free(buffer);
+/**
+ * 
+ * Functions configuration file
+ * 
+ */
+
+void cleanPooleInfo() {
+    if (poole_info.name != NULL) {
+        cleanPointer(poole_info.name);
+    }
+    if (poole_info.ip != NULL) {
+        cleanPointer(poole_info.ip);
+    }
 }
 
 PooleInfo frameToPooleInfo () {
@@ -74,7 +92,7 @@ PooleInfo frameToPooleInfo () {
     buffer = readStringUntilChar(endCharPos + 1, receive.data, ' ', &endCharPos);
     poole_info.port = atoi(buffer); //Does not matter the endChar we put here
 
-    free (buffer);
+    cleanPointer (buffer);
     return poole_info;
 }
 
@@ -88,7 +106,9 @@ int connectToPoole () {
     if (frameIsValid(receive)) {
 
         if (strcmp(receive.header, RESPONSE_OK) == 0) {
-            close (fd_socket);
+            cleanSockets (fd_socket);
+            fd_socket = -1;
+
             poole_info = frameToPooleInfo(receive);
 
             fd_socket = startServerConnection(poole_info.ip, poole_info.port);
@@ -122,31 +142,34 @@ int connectToPoole () {
     return -1;
 }
 
+/**
+ * 
+ * Functions for songs
+ * 
+ */
 
-
-void updatePlaylist(const char *playlistName) {
-    playLists.numPlayList++;
-    playLists.playList = realloc(playLists.playList, sizeof(PlayList) * playLists.numPlayList);
-
-    playLists.playList[playLists.numPlayList - 1].name = strdup(playlistName);
-    playLists.playList[playLists.numPlayList - 1].songs = NULL;
-    playLists.playList[playLists.numPlayList - 1].numSongs = 0;
+void cleanSongs() {
+    if(songs.songs == 0) {
+        return;
+    }
+    for (int i = 0; i < songs.numSongs; i++) {
+        cleanPointer(songs.songs[i]);
+    }
+    cleanPointer(songs.songs);
+    songs.songs = NULL;
+    songs.numSongs = 0;
 }
 
-void updateSong(const char *SongName) {
-    playLists.playList[playLists.numPlayList - 1].numSongs++;
+void updateSongList(const char *SongName) {
+    songs.numSongs++;
 
-    playLists.playList[playLists.numPlayList - 1].songs = realloc(
-        playLists.playList[playLists.numPlayList - 1].songs,
-        sizeof(char*) * playLists.playList[playLists.numPlayList - 1].numSongs
-    );
+    songs.songs = realloc(songs.songs,sizeof(char*) * songs.numSongs);
 
-    playLists.playList[playLists.numPlayList - 1].songs[playLists.playList[playLists.numPlayList - 1].numSongs - 1] = strdup(SongName);
+    songs.songs[songs.numSongs - 1] = strdup(SongName);
 }
 
 void parseReceivedSongs(){
     int result = -1;
-    updatePlaylist("AllSongs");
     do{
         cleanFrame(&receive);
         receive = receiveFrame(fd_socket);
@@ -158,12 +181,54 @@ void parseReceivedSongs(){
             if(!strcmp(token,"0") || !strcmp (token,"1")){
                 result = atoi(token);
             }else{
-                updateSong(token);
+                updateSongList(token);
             }
             
             token = strtok(NULL, "&");
         }while(result != 0 && result != 1);
     }while (result != 0);
+}
+
+/**
+ * 
+ * Functions for playlists
+ * 
+ */
+
+void cleanPlayLists() {
+    if(playLists.playList == 0) {
+        return;
+    }
+    for (int i = 0; i < playLists.numPlayList; i++) {
+        cleanPointer(playLists.playList[i].name);
+        for (int j = 0; j < playLists.playList[i].numSongs; j++) {
+            cleanPointer(playLists.playList[i].songs[j]);
+        }
+        cleanPointer(playLists.playList[i].songs);
+    }
+    cleanPointer(playLists.playList);
+    playLists.playList = NULL;
+    playLists.numPlayList = 0;
+}
+
+void updatePlaylist(const char *playlistName) {
+    playLists.numPlayList++;
+    playLists.playList = realloc(playLists.playList, sizeof(PlayList) * playLists.numPlayList);
+
+    playLists.playList[playLists.numPlayList - 1].name = strdup(playlistName);
+    playLists.playList[playLists.numPlayList - 1].songs = NULL;
+    playLists.playList[playLists.numPlayList - 1].numSongs = 0;
+}
+
+void updateSongOfPlayList(const char *SongName) {
+    playLists.playList[playLists.numPlayList - 1].numSongs++;
+
+    playLists.playList[playLists.numPlayList - 1].songs = realloc(
+        playLists.playList[playLists.numPlayList - 1].songs,
+        sizeof(char*) * playLists.playList[playLists.numPlayList - 1].numSongs
+    );
+
+    playLists.playList[playLists.numPlayList - 1].songs[playLists.playList[playLists.numPlayList - 1].numSongs - 1] = strdup(SongName);
 }
 
 void parseReceivedPlayList(int fd){
@@ -174,11 +239,12 @@ void parseReceivedPlayList(int fd){
         cleanFrame(&receive);
         receive = receiveFrame(fd);
         token = strtok(receive.data, "&");
+
         while (strcmp(token,"0") && strcmp (token,"1") && strcmp (token,"2")) {
             if (strchr(token, '#')){
                 char *saveptr;
                 char *songToken = strtok_r(token, "#", &saveptr);
-                updateSong(songToken);
+                updateSongOfPlayList(songToken);
                 char *playlistToken = strtok_r(NULL, "#", &saveptr);
                 if (playlistToken != NULL) {
                     updatePlaylist(playlistToken);
@@ -187,7 +253,7 @@ void parseReceivedPlayList(int fd){
                 updatePlaylist(token);
                 status = -1;
             }else{
-                updateSong(token);
+                updateSongOfPlayList(token);
             }
 
             token = strtok(NULL, "&");
@@ -198,44 +264,58 @@ void parseReceivedPlayList(int fd){
     }
 }
 
+/**
+ * 
+ * Functions for disconect
+ * 
+ */
+
 void disconnectFromPoole () {
-    close (fd_socket);
-    fd_socket = -1;
+    sendFrame(0x06, EXIT, client_config.name, fd_socket);
+    cleanSockets (fd_socket);
 }
+
+/**
+ * 
+ * Functions for command mode
+ * 
+ */
 
 // Function to manage user-input commands.
 void enterCommandMode() {
     char* command;
     int command_case_num;
+
+    //int resultSongs = -1;
+    //int resultPlaylists = -1;
     do {
 
         printx("\n$ ");
         command = readUntilChar(STDIN_FILENO, '\n');
         command_case_num = commandToCmdCaseNum(command);
-        free(command);
+        cleanPointer(command);
         
         switch (command_case_num) {
             case CONNECT_CMD:
                 fd_socket = connectToPoole();
                 break;
             case LOGOUT_CMD:
-                sendFrame(0x06, EXIT, client_config.name, fd_socket);
                 disconnectFromPoole();
                 break;
             case LIST_SONGS_CMD:
                 sendFrame(0x02, LIST_SONGS, "", fd_socket);
                 
-                cleanPlayLists();
+                cleanSongs();
                 parseReceivedSongs();
                 
-                asprintf(&buffer, "There are %d songs available for download:\n",playLists.playList[0].numSongs);
+                asprintf(&buffer, "There are %d songs available for download:\n", songs.numSongs);
                 printRes(buffer);
-                free(buffer);
+                cleanPointer(buffer);
 
-                for (int i = 0; i < playLists.playList[0].numSongs; i++) {
-                    asprintf(&buffer, "%d. %s\n",i + 1 ,playLists.playList[0].songs[i]);
+                for (int i = 0; i < songs.numSongs; i++){
+                    asprintf(&buffer, "%d. %s\n",i + 1 ,songs.songs[i]);
                     printRes(buffer);
-                    free(buffer);
+                    cleanPointer(buffer);
                 }
 
                 break;
@@ -247,16 +327,16 @@ void enterCommandMode() {
                 
                 asprintf(&buffer, "There are %d lists available for download:\n",playLists.numPlayList);
                 printRes(buffer);
-                free(buffer);
+                cleanPointer(buffer);
 
                 for (int i = 0; i < playLists.numPlayList ; i++){
                     asprintf(&buffer, "%d. %s\n",i + 1 ,playLists.playList[i].name);
                     printRes(buffer);
-                    free(buffer);
+                    cleanPointer(buffer);
                     for (int j = 0; j < playLists.playList[i].numSongs; j++){
                         asprintf(&buffer, "\t%c. %s\n",j + 'a' ,playLists.playList[i].songs[j]);
                         printRes(buffer);
-                        free(buffer);
+                        cleanPointer(buffer);
                     }
                 }
                 
@@ -293,25 +373,31 @@ void enterCommandMode() {
 
 }
 
+/**
+ * 
+ * Functions for unexpected termination
+ * 
+ */
+
 // Handle unexpected termination scenarios.
 void terminateExecution () {
-    free(client_config.name);
-    free(client_config.files_folder);
-    free(client_config.ip_discovery);
-
-    close (fd_config);
+    if (fd_config != -1){
+        close (fd_config);
+    }
 
     if (fd_socket != -1) {
-        sendFrame(0x06, EXIT, client_config.name, fd_socket);
         disconnectFromPoole();
     }
 
+    if (buffer != NULL){
+        cleanPointer(buffer);
+    }
+
+    cleanClientConfig(&client_config);
     cleanFrame(&receive);
-
+    cleanPooleInfo();
     cleanPlayLists();
-
-    free(poole_info.name);
-    free(poole_info.ip);
+    cleanSongs();
 
     signal(SIGINT, SIG_DFL);
     raise(SIGINT);
@@ -341,9 +427,9 @@ int main (int argc, char** argv) {
         client_config = readConfigFile(fd_config);
     }
 
-    //printConfigFile(client_config);
-
-    printInitMsg();
+    asprintf(&buffer, "\n%s user initialized\n", client_config.name);
+    printx(buffer);
+    cleanPointer(buffer);
 
     enterCommandMode();
     

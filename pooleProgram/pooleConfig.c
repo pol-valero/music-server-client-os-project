@@ -1,5 +1,5 @@
 #include "pooleConfig.h"
-#include "globals.h"
+
 
 // Read the configuration file and return the clientConfig struct with all fields filled.
 ServerConfig readConfigFile(int fd_config) {
@@ -60,3 +60,19 @@ void printConfigFile(ServerConfig server_config) {
     printDynStr(buffer, buffSize);
     free(buffer);
 }
+
+void cleanServerConfig(ServerConfig* server_config) {
+    if (server_config->name != NULL){
+        cleanPointer(server_config->name);
+    }
+    if (server_config->files_folder != NULL){
+        cleanPointer(server_config->files_folder);
+    }
+    if (server_config->ip_discovery != NULL){
+        cleanPointer(server_config->ip_discovery);
+    }
+    if (server_config->ip_poole != NULL){
+        cleanPointer(server_config->ip_poole);
+    }
+}
+

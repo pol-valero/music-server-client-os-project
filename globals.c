@@ -1,13 +1,115 @@
 #include "globals.h"
 
-char* currentInputPointer;  //We will free this pointer if the program is interrupted by a SIGNAL
+void sendFrame (uint8_t type, char* header, char* data, int fd_socket) {
 
-//Returns the current input pointer, in order to be freed if the program is interrupted by a SIGNAL
-char* getGlobalsCurrentInputPointer() {
-    return currentInputPointer;
+    Frame frame = createFrame(type, header, data);
+    char* buffer = serializeFrame(frame);
+    write(fd_socket, buffer, 256);
+    free(buffer);
+    free(frame.header);
+    free(frame.data);
 }
 
-int start_server(int port, char *ip) {
+Frame receiveFrame (int fd_socket) {
+
+    char* buffer = malloc(sizeof(char) * 256);
+    read(fd_socket, buffer, 256);
+    Frame frame = deserializeFrame(buffer);
+    free(buffer);
+
+    return frame;
+}
+
+Frame createFrame(uint8_t type, char* header, char* data) {
+    
+    Frame frame;
+
+    uint16_t header_length = strlen(header) + 1;    //We add 1 to the length to include the '\0' character
+    uint16_t data_length = strlen(data) + 1;
+    uint16_t data_field_length = 256 - 3 - header_length;
+
+    frame.type = type;
+    frame.header_length = header_length;
+
+    frame.header = malloc(sizeof(char) * header_length);
+    strcpy(frame.header, header);
+
+    if (data_length == data_field_length) {
+        frame.data = malloc(sizeof(char) * data_field_length);
+        strcpy(frame.data, data);  //If the data has exactly the size of the data field, we can just point to it.
+    } else {
+        
+        char* allocatedData;
+
+        allocatedData = malloc(sizeof(char) * data_field_length); //If the data is smaller than the data field, we need request more memory and add padding.
+
+        strcpy(allocatedData, data); //We copy the data to the allocated memory
+        memset(allocatedData + data_length, '\0', data_field_length - data_length); //We add '\0' as a padding to the data field.
+        //allocatedData + data_length = starting position of the padding
+        //data_field_length - data_length = number of '\0' padding to add
+
+        frame.data = allocatedData;
+    }
+
+    return frame;
+}
+
+char* serializeFrame(Frame frame) {
+
+    char* buffer = malloc(sizeof(char) * 256);      //256 bytes is the fixed size of a frame
+
+    int offset = 0;
+
+    memcpy(buffer, &frame.type, sizeof(frame.type));
+    offset += sizeof(frame.type);
+
+    memcpy(buffer + offset, &frame.header_length, sizeof(frame.header_length));
+    offset += sizeof(frame.header_length);
+
+    memcpy(buffer + offset, frame.header, frame.header_length);
+    offset += frame.header_length;
+
+    memcpy(buffer + offset, frame.data, 256 - 3 - frame.header_length);
+
+    return buffer;
+}
+
+Frame deserializeFrame(char* buffer) {
+    Frame frame;
+
+    int offset = 0;
+
+    memcpy(&frame.type, buffer, sizeof(frame.type));
+    offset += sizeof(frame.type);
+
+    memcpy(&frame.header_length, buffer + offset, sizeof(frame.header_length));
+    offset += sizeof(frame.header_length);
+
+    frame.header = malloc(sizeof(char) * frame.header_length);
+    memcpy(frame.header, buffer + offset, frame.header_length);
+    offset += frame.header_length;
+
+    frame.data = malloc(sizeof(char) * (256 - 3 - frame.header_length));
+    memcpy(frame.data, buffer + offset, 256 - 3 - frame.header_length);
+
+    return frame;
+}
+
+int frameIsValid(Frame frame) {
+    if (frame.type < 0x01 || frame.type > 0x07) {
+        return 0;
+    }
+
+    //TODO: Check if header is of any known type? (CON_OK, CON_KO, etc.)
+
+    if (frame.header_length != strlen(frame.header) + 1) {
+        return 0;
+    }
+
+    return 1;
+}
+
+int startServer(int port, char *ip) {
     int fd_socket;
 
     struct sockaddr_in socket_addr;
@@ -27,10 +129,10 @@ int start_server(int port, char *ip) {
     socket_addr.sin_family = AF_INET;
     socket_addr.sin_addr.s_addr = inet_addr(ip); //We convert IP string to a proper address for the in_addr structure
 
-    if (bind (fd_socket, (void *) &socket_addr, sizeof (socket_addr)) < 0) {
-        printx("ERROR binding port\n");
+    if (bind (fd_socket, (void *)&socket_addr, sizeof(socket_addr)) < 0) {
+        printEr("ERROR binding port\n");
 
-        close(fd_socket);
+        cleanSockets(fd_socket);
 
         return -1;
     }
@@ -43,8 +145,7 @@ int start_server(int port, char *ip) {
 
 int startServerConnection(char* ip, int port) {
 
-    char buffer[100]; //TODO: Make dynamic memory buffer
-    int buffer_bytes;
+    char* buffer; 
 
     struct sockaddr_in socket_addr;
     int socket_conn = -1;
@@ -63,9 +164,10 @@ int startServerConnection(char* ip, int port) {
 
         if (connect(socket_conn, (void *) &socket_addr, sizeof(socket_addr)) < 0) {
             
-            buffer_bytes = sprintf(buffer, "Connection error with the server: %s", strerror(errno));
-            write(1, buffer, buffer_bytes);
-            close(socket_conn);
+            asprintf(&buffer, "Connection error with the server: %s\n", strerror(errno));
+            printx(buffer);
+            cleanSockets(socket_conn);
+            free(buffer);
 
             return -1;
         }
@@ -75,8 +177,6 @@ int startServerConnection(char* ip, int port) {
     return socket_conn;
 
 }
-
-
 
 // Read characters until reaching either endChar or endChar2. If endChar2 is found, set endChar2Found to 1.
 char* readUntilEitherChar(int fd, char endChar, char endChar2, int* endChar2Found) {
@@ -115,7 +215,6 @@ char* readUntilChar(int fd, char endChar) {
 
     char* string = malloc(sizeof(char));
 
-    currentInputPointer = string;
     while (1) {
         size = read(fd, &c, sizeof(char));
         
@@ -123,14 +222,12 @@ char* readUntilChar(int fd, char endChar) {
             string = realloc(string, sizeof(char) * (i + 2));
             string[i++] = c;
 
-            currentInputPointer = string;
         } else {
             break;
         }
     }
     string[i] = '\0';
 
-    currentInputPointer = NULL; //If we can return the string because no SIGNALs have interrupted the program, we set the pointer to NULL so it is not freed (we will free the string)
     return string;
 }
 
@@ -142,7 +239,6 @@ char* readUntilCharExceptLetter(int fd, char endChar, char exception) {
 
     char* string = malloc(sizeof(char));
 
-    currentInputPointer = string;
     while (1) {
         size = read(fd, &c, sizeof(char));
         
@@ -151,7 +247,6 @@ char* readUntilCharExceptLetter(int fd, char endChar, char exception) {
                 string = realloc(string, sizeof(char) * (i + 2));
                 string[i++] = c;
 
-                currentInputPointer = string;
             }
         } else {
             break;
@@ -159,11 +254,58 @@ char* readUntilCharExceptLetter(int fd, char endChar, char exception) {
     }
     string[i] = '\0';
 
-    currentInputPointer = NULL; //If we can return the string because no SIGNALs have interrupted the program, we set the pointer to NULL so it is not freed (we will free the string)
     return string;
+}
+
+char* readStringUntilChar(int startingPos, char* string, char endChar, int* endCharPos) {
+    int length = 0;
+
+    while (string[startingPos + length] != '\0' && string[startingPos + length] != endChar) {
+        length++;
+    }
+
+    char* result = (char*)malloc((length + 1) * sizeof(char));
+
+    for (int i = 0; i < length; i++) {
+        result[i] = string[startingPos + i];
+    }
+
+    result[length] = '\0';
+
+    if (string[startingPos + length] == endChar) {
+        *endCharPos = startingPos + length;
+    } else {
+        *endCharPos = -1; //Character not found
+    }
+
+    return result;
 }
 
 //Prints dynamic string, where we cannot use strlen
 void printDynStr(char* buffer, int bufferSize) {
      write(1, buffer, bufferSize);
 }
+
+void printQue(char *message) {
+    write(STDOUT_FILENO, ANSI_COLOR_BLUE, strlen(ANSI_COLOR_BLUE));
+    write(STDOUT_FILENO, message, strlen(message));
+    write(STDOUT_FILENO, ANSI_COLOR_RESET, strlen(ANSI_COLOR_RESET));
+}
+
+void printRes(char *message) {
+    write(STDOUT_FILENO, ANSI_COLOR_GREEN, strlen(ANSI_COLOR_GREEN));
+    write(STDOUT_FILENO, message, strlen(message));
+    write(STDOUT_FILENO, ANSI_COLOR_RESET, strlen(ANSI_COLOR_RESET));
+}
+
+void cleanFrame(Frame* frame) {
+    if (frame->header != NULL){
+        free(frame->header);
+        frame->header = NULL;
+    }
+    if (frame->data != NULL){
+        free(frame->data);
+        frame->data = NULL;
+    }
+}
+

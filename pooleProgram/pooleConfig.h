@@ -1,6 +1,8 @@
 #ifndef _POOLE_CONFIG_H_
 #define _POOLE_CONFIG_H_
 
+#include "../globals.h"
+
 typedef struct {
     char* name;
     char* files_folder;
@@ -13,5 +15,7 @@ typedef struct {
 ServerConfig readConfigFile(int fd_config);
 
 void printConfigFile(ServerConfig client_config);
+
+void cleanServerConfig(ServerConfig* server_config);
 
 #endif

@@ -15,6 +15,8 @@ typedef struct {
 } PooleStatsList;
 
 int fd_config;
+int fd_socket_poole;
+int fd_socket_bowman;
 
 DiscoveryConfig discovery_config; //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
 
@@ -107,7 +109,7 @@ void handlePooleFrameType(Frame frame, int fd_client, PooleStatsList* list) {
         case 0x01:
             //New connection
             {
-            sendFrame(0x01, "CON_OK", "", fd_client);
+            sendFrame(0x01, RESPONSE_OK, "", fd_client);
              
             PooleStats poole_stats = createPooleStats(frame);
 
@@ -134,13 +136,16 @@ void* listenForPooleConnections(void* arg) {
     PooleStatsList* list = (PooleStatsList*) arg;
 
     int fd_client;
-    int fd_socket_poole;
 
     struct sockaddr_in c_addr;
     socklen_t c_len = sizeof(c_addr);
 
     fd_socket_poole = startServer(discovery_config.port_poole, discovery_config.ip_poole);
 
+    if (fd_socket_poole < 0) {
+        printEr("ERROR: Cannot create socket poole\n");
+        return 0;
+    }
 
     while (1) {
 
@@ -154,7 +159,7 @@ void* listenForPooleConnections(void* arg) {
 
         } else {
             //sendFrame(0x01, "CON_KO", "", fd_client);
-            sendFrame(0x07, "UNKNOWN", "", fd_client);
+            sendFrame(0x07, UNKNOWN, "", fd_client);
         }
 
         free(frame.header);
@@ -175,7 +180,7 @@ void handleBowmanFrameType(Frame frame, int fd_client, PooleStatsList* list) {
             char* buffer;
             asprintf(&buffer, "%s&%s&%d", poole_min_conn.name, poole_min_conn.ip, poole_min_conn.port);
 
-            sendFrame(0x01, "CON_OK", buffer, fd_client);
+            sendFrame(0x01, RESPONSE_OK, buffer, fd_client);
 
             free(buffer);
             }
@@ -193,7 +198,6 @@ void* listenForBowmanConnections(void* arg) {
     //Thread
 
     int fd_client;
-    int fd_socket_bowman;
 
     //PooleStatsList list = *((PooleStatsList*) arg);
     PooleStatsList* list = (PooleStatsList*) arg;
@@ -203,6 +207,10 @@ void* listenForBowmanConnections(void* arg) {
 
     fd_socket_bowman = startServer(discovery_config.port_bowman, discovery_config.ip_bowman);
 
+    if (fd_socket_bowman < 0) {
+        printEr("ERROR: Cannot create socket bowman\n");
+        return 0;
+    }
 
     while (1) {
 
@@ -214,14 +222,14 @@ void* listenForBowmanConnections(void* arg) {
         if (frameIsValid(frame)) {
             
             if ((*list).n_poole_stats == 0) {
-                sendFrame(0x01, "CON_KO", "", fd_client); 
+                sendFrame(0x01, RESPONSE_KO, "", fd_client); 
             } else {
                 handleBowmanFrameType(frame, fd_client, list);
             }
 
         } else {
 
-            sendFrame(0x07, "UNKNOWN", "", fd_client);
+            sendFrame(0x07, UNKNOWN, "", fd_client);
 
         }
 
@@ -256,6 +264,8 @@ void terminateExecution () {
     free(discovery_config.ip_poole);
 
     close (fd_config);
+    close (fd_socket_poole);
+    close (fd_socket_bowman);
 
     signal(SIGINT, SIG_DFL);
     raise(SIGINT);

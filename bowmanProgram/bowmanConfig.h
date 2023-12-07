@@ -14,4 +14,6 @@ ClientConfig readConfigFile(int fd_config);
 
 void printConfigFile(ClientConfig client_config);
 
+void cleanClientConfig(ClientConfig* client_config);
+
 #endif

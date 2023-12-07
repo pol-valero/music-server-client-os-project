@@ -2,70 +2,124 @@
 #include "bowmanConfig.h"
 #include "bowmanCmdProcessing.h"
 
+/**
+ * 
+ * Structs
+ * 
+ */
 typedef struct {
     char* name;
     char* ip;
     int port;
 } PooleInfo;
 
-PooleInfo poole_info;
+typedef struct {
+    char* name;
+    char** songs;
+    int numSongs;
+} PlayList;
 
-int fd_config;
+typedef struct {
+    PlayList* playList;
+    int numPlayList;
+} PlayLists;
 
-ClientConfig client_config; //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
+typedef struct {
+    char** songs;
+    int numSongs;
+}Songs;
 
-void printInitMsg() {
-    char* buffer;
-    int buffSize;
+/**
+ * 
+ * Global variables
+ * 
+ */
+PlayLists playLists = { NULL, 0 };
 
-    buffSize = asprintf(&buffer, "\n%s user initialized\n", client_config.name);
-    printDynStr(buffer, buffSize);
-    free(buffer);
-}
+Songs songs = { NULL, 0};
+
+PooleInfo poole_info = { NULL, NULL, 0 };
+
+ClientConfig client_config = { NULL, NULL, NULL, 0};
+
+Frame receive = { 0, 0, NULL, NULL };
+
+char* buffer = NULL;
+
+/**
+ * 
+ * Sockets file descriptors
+ * 
+ */
+int fd_config = -1;
+
+int fd_socket = -1; 
+
+/**
+ * 
+ * Print functions
+ * 
+ */
 
 void printConnectionInitMsg() {
-    char* buffer;
-    int buffSize;
-
-    buffSize = asprintf(&buffer, "\n%s connected to HAL 9000 system, welcome music lover!\n", client_config.name);
-    printDynStr(buffer, buffSize);
-    free(buffer);
+    asprintf(&buffer, "%s connected to HAL 9000 system, welcome music lover!\n", client_config.name);
+    printx(buffer);
+    cleanPointer(buffer);
 }
 
-PooleInfo frameToPooleInfo (Frame frame) {
+/**
+ * 
+ * Functions configuration file
+ * 
+ */
 
-    PooleInfo poole_info;
+void cleanPooleInfo() {
+    if (poole_info.name != NULL) {
+        cleanPointer(poole_info.name);
+    }
+    if (poole_info.ip != NULL) {
+        cleanPointer(poole_info.ip);
+    }
+}
+
+PooleInfo frameToPooleInfo () {
 
     int endCharPos;
     
-    poole_info.name = readStringUntilChar(0, frame.data, '&', &endCharPos);
-    poole_info.ip = readStringUntilChar(endCharPos + 1, frame.data, '&', &endCharPos);
-    poole_info.port = atoi(readStringUntilChar(endCharPos + 1, frame.data, ' ', &endCharPos)); //Does not matter the endChar we put here
+    poole_info.name = readStringUntilChar(0, receive.data, '&', &endCharPos);
+    poole_info.ip = readStringUntilChar(endCharPos + 1, receive.data, '&', &endCharPos);
 
+    buffer = readStringUntilChar(endCharPos + 1, receive.data, ' ', &endCharPos);
+    poole_info.port = atoi(buffer); //Does not matter the endChar we put here
+
+    cleanPointer (buffer);
     return poole_info;
 }
 
 int connectToPoole () {
     int fd_socket = startServerConnection(client_config.ip_discovery, client_config.port_discovery);
-    sendFrame(0x01, "NEW_BOWMAN", client_config.name, fd_socket);
+    sendFrame(0x01, BOWMAN_TO_DISCOVERY, client_config.name, fd_socket);
     
-    Frame responseFrame = receiveFrame(fd_socket);
+    cleanFrame(&receive);
+    receive = receiveFrame(fd_socket);
 
+    if (frameIsValid(receive)) {
 
-    if (frameIsValid(responseFrame)) {
+        if (strcmp(receive.header, RESPONSE_OK) == 0) {
+            cleanSockets (fd_socket);
+            fd_socket = -1;
 
-        if (strcmp(responseFrame.header, "CON_OK") == 0) {
-            close (fd_socket);
-            poole_info = frameToPooleInfo(responseFrame);
+            poole_info = frameToPooleInfo(receive);
 
             fd_socket = startServerConnection(poole_info.ip, poole_info.port);
-            sendFrame(0x01, "NEW_BOWMAN", client_config.name, fd_socket);
+            sendFrame(0x01, BOWMAN_TO_POOLE, client_config.name, fd_socket);
 
-            responseFrame = receiveFrame(fd_socket);
+            cleanFrame(&receive);
+            receive = receiveFrame(fd_socket);
 
-            if (frameIsValid(responseFrame)) {
+            if (frameIsValid(receive)) {
 
-                if (strcmp(responseFrame.header, "CON_OK") == 0) {
+                if (strcmp(receive.header, RESPONSE_OK) == 0) {
                     printConnectionInitMsg();
                     return fd_socket;
                 } else {
@@ -74,125 +128,241 @@ int connectToPoole () {
 
             } else {
                 //TODO: Maybe do a while loop to keep trying to receive a valid frame
-                sendFrame(0x07, "UNKNOWN", "", fd_socket); 
+                sendFrame(0x07, UNKNOWN, "", fd_socket); 
             }
         } else {
             printEr("ERROR: Connection to discovery server failed, CON_KO returned\n");
         }
 
     } else {
-        sendFrame(0x07, "UNKNOWN", "", fd_socket);
+        sendFrame(0x07, UNKNOWN, "", fd_socket);
         //TODO: Maybe do a while loop to keep trying to receive a valid frame
     }
 
     return -1;
-
-    char buffer2[100];
-    sprintf(buffer2, "%d %d %s %s", responseFrame.type, responseFrame.header_length, responseFrame.header, responseFrame.data);
-    printx(buffer2);
 }
 
-char** parseReceivedSongs(char* data, int* hasNextFrame, int* num_songs, char** songs){
-    
-   /* WHILE (
-        //FRASEpARSEADA = LEER HASTA &
-        if(fraseParseada = "NEW_FRAME_INCOMING")
-            hasNextFrame = 1;
-            
-        )
-    )*/
-    int endChar;
-    char* token = readStringUntilChar(0, data, '&', &endChar);
-    while (1) {
-        if (strcmp(token,"NEW_FRAME_INCOMING") == 0){
-            *hasNextFrame = 1;
-            break;
-        }else if(strcmp(token,"NEW_FRAME_NOT_INCOMING") == 0){
-            *hasNextFrame = 0;
-            break;
-        }
-        (*num_songs)++;
-        songs = realloc(songs, sizeof(char*) * (*num_songs));
-        songs[(*num_songs) - 1] = strdup(token);
+/**
+ * 
+ * Functions for songs
+ * 
+ */
 
-        token = readStringUntilChar(endChar + 1, data, '&', &endChar);
+void cleanSongs() {
+    if(songs.songs == 0) {
+        return;
     }
-    return songs;
+    for (int i = 0; i < songs.numSongs; i++) {
+        cleanPointer(songs.songs[i]);
+    }
+    cleanPointer(songs.songs);
+    songs.songs = NULL;
+    songs.numSongs = 0;
 }
+
+void updateSongList(const char *SongName) {
+    songs.numSongs++;
+
+    songs.songs = realloc(songs.songs,sizeof(char*) * songs.numSongs);
+
+    songs.songs[songs.numSongs - 1] = strdup(SongName);
+}
+
+void parseReceivedSongs(){
+    int result = -1;
+    do{
+        cleanFrame(&receive);
+        receive = receiveFrame(fd_socket);
+
+        char* token;
+        token = strtok(receive.data, "&");
+        result = -1;
+        do{
+            if(!strcmp(token,"0") || !strcmp (token,"1")){
+                result = atoi(token);
+            }else{
+                updateSongList(token);
+            }
+            
+            token = strtok(NULL, "&");
+        }while(result != 0 && result != 1);
+    }while (result != 0);
+}
+
+/**
+ * 
+ * Functions for playlists
+ * 
+ */
+
+void cleanPlayLists() {
+    if(playLists.playList == 0) {
+        return;
+    }
+    for (int i = 0; i < playLists.numPlayList; i++) {
+        cleanPointer(playLists.playList[i].name);
+        for (int j = 0; j < playLists.playList[i].numSongs; j++) {
+            cleanPointer(playLists.playList[i].songs[j]);
+        }
+        cleanPointer(playLists.playList[i].songs);
+    }
+    cleanPointer(playLists.playList);
+    playLists.playList = NULL;
+    playLists.numPlayList = 0;
+}
+
+void updatePlaylist(const char *playlistName) {
+    playLists.numPlayList++;
+    playLists.playList = realloc(playLists.playList, sizeof(PlayList) * playLists.numPlayList);
+
+    playLists.playList[playLists.numPlayList - 1].name = strdup(playlistName);
+    playLists.playList[playLists.numPlayList - 1].songs = NULL;
+    playLists.playList[playLists.numPlayList - 1].numSongs = 0;
+}
+
+void updateSongOfPlayList(const char *SongName) {
+    playLists.playList[playLists.numPlayList - 1].numSongs++;
+
+    playLists.playList[playLists.numPlayList - 1].songs = realloc(
+        playLists.playList[playLists.numPlayList - 1].songs,
+        sizeof(char*) * playLists.playList[playLists.numPlayList - 1].numSongs
+    );
+
+    playLists.playList[playLists.numPlayList - 1].songs[playLists.playList[playLists.numPlayList - 1].numSongs - 1] = strdup(SongName);
+}
+
+void parseReceivedPlayList(int fd){
+    char* token;
+    int status = 2;
+    
+    while (status != 0){
+        cleanFrame(&receive);
+        receive = receiveFrame(fd);
+        token = strtok(receive.data, "&");
+
+        while (strcmp(token,"0") && strcmp (token,"1") && strcmp (token,"2")) {
+            if (strchr(token, '#')){
+                char *saveptr;
+                char *songToken = strtok_r(token, "#", &saveptr);
+                updateSongOfPlayList(songToken);
+                char *playlistToken = strtok_r(NULL, "#", &saveptr);
+                if (playlistToken != NULL) {
+                    updatePlaylist(playlistToken);
+                }
+            }else if(status == 2){
+                updatePlaylist(token);
+                status = -1;
+            }else{
+                updateSongOfPlayList(token);
+            }
+
+            token = strtok(NULL, "&");
+            if (!strcmp(token,"0") || !strcmp (token,"1") || !strcmp (token,"2")){
+                status = atoi(token);
+            }
+        }
+    }
+}
+
+/**
+ * 
+ * Functions for disconect
+ * 
+ */
+
+void disconnectFromPoole () {
+    sendFrame(0x06, EXIT, client_config.name, fd_socket);
+    cleanSockets (fd_socket);
+}
+
+/**
+ * 
+ * Functions for command mode
+ * 
+ */
 
 // Function to manage user-input commands.
 void enterCommandMode() {
     char* command;
     int command_case_num;
-    //TODO: Change this
-        int fd_socket; 
-        Frame frame;
 
-        int test = 0;
-        int num_songs = 0;
-        char** songs;
-        /////////////////////////
+    //int resultSongs = -1;
+    //int resultPlaylists = -1;
     do {
 
-        printx("$ ");
+        printx("\n$ ");
         command = readUntilChar(STDIN_FILENO, '\n');
         command_case_num = commandToCmdCaseNum(command);
-        free(command);
+        cleanPointer(command);
         
         switch (command_case_num) {
             case CONNECT_CMD:
-                //printx("Comanda OK\n");
                 fd_socket = connectToPoole();
                 break;
             case LOGOUT_CMD:
-                printx("Comanda OK\n");
-                //TODO: disconnectFromPoole();
+                disconnectFromPoole();
                 break;
             case LIST_SONGS_CMD:
-                sendFrame(0x02, "LIST_SONGS", "", fd_socket);
+                sendFrame(0x02, LIST_SONGS, "", fd_socket);
                 
-                //while (!test) {
-                    frame = receiveFrame(fd_socket);
-                    songs = parseReceivedSongs(frame.data, &test, &num_songs, songs);
-                //}
-                for (int i = 0; i < num_songs; i++) {
-                    printx(songs[i]);
-                    printx("\n");
+                cleanSongs();
+                parseReceivedSongs();
+                
+                asprintf(&buffer, "There are %d songs available for download:\n", songs.numSongs);
+                printRes(buffer);
+                cleanPointer(buffer);
+
+                for (int i = 0; i < songs.numSongs; i++){
+                    asprintf(&buffer, "%d. %s\n",i + 1 ,songs.songs[i]);
+                    printRes(buffer);
+                    cleanPointer(buffer);
                 }
 
-                //TODO: Create function that receives frame and depending on the header, listens for 
-                //more frames if necessary (if there are a lot of songs)
                 break;
             case LIST_PLAYLISTS_CMD:
-                //TODO: Change this
+                sendFrame(0x02, LIST_PLAYLISTS, "", fd_socket);
+
+                cleanPlayLists();
+                parseReceivedPlayList(fd_socket);
                 
-                sendFrame(0x02, "LIST_PLAYLISTS", "", fd_socket);
+                asprintf(&buffer, "There are %d lists available for download:\n",playLists.numPlayList);
+                printRes(buffer);
+                cleanPointer(buffer);
+
+                for (int i = 0; i < playLists.numPlayList ; i++){
+                    asprintf(&buffer, "%d. %s\n",i + 1 ,playLists.playList[i].name);
+                    printRes(buffer);
+                    cleanPointer(buffer);
+                    for (int j = 0; j < playLists.playList[i].numSongs; j++){
+                        asprintf(&buffer, "\t%c. %s\n",j + 'a' ,playLists.playList[i].songs[j]);
+                        printRes(buffer);
+                        cleanPointer(buffer);
+                    }
+                }
                 
-                
-                ///////////////////
-                printx("Comanda OK\n");
                 break;
             case DOWNLOAD_SONG_CMD:
-                printx("Comanda OK\n");
+                printRes("Comanda OK\n");
                 break;
             case DOWNLOAD_PLAYLIST_CMD:
-                printx("Comanda OK\n");
+                printRes("Comanda OK\n");
                 break;
             case CHECK_DOWNLOADS_CMD:
-                printx("Comanda OK\n");
+                printRes("Comanda OK\n");
                 break;
             case CLEAR_DOWNLOADS_CMD:
-                printx("Comanda OK\n");
+                printRes("Comanda OK\n");
                 break;
             case PARTIALLY_CORRECT_CMD:
-                printx("Comanda KO\n");
+                printEr("Comanda KO\n");
                 //Unknown command
                 break;
             case INVALID_CMD:
-                printx("Comanda KO\n");
+                printEr("Comanda KO\n");
                 //Not valid command
                 break;
             case NO_CMD:
+                printEr("ERROR: No command entered\n");
                 //No command entered
                 break;
             default:
@@ -203,19 +373,34 @@ void enterCommandMode() {
 
 }
 
+/**
+ * 
+ * Functions for unexpected termination
+ * 
+ */
+
 // Handle unexpected termination scenarios.
 void terminateExecution () {
+    if (fd_config != -1){
+        close (fd_config);
+    }
 
+    if (fd_socket != -1) {
+        disconnectFromPoole();
+    }
 
-    free(client_config.name);
-    free(client_config.files_folder);
-    free(client_config.ip_discovery);
+    if (buffer != NULL){
+        cleanPointer(buffer);
+    }
 
-    close (fd_config);
+    cleanClientConfig(&client_config);
+    cleanFrame(&receive);
+    cleanPooleInfo();
+    cleanPlayLists();
+    cleanSongs();
 
     signal(SIGINT, SIG_DFL);
     raise(SIGINT);
-
 }
 
 //main function :P
@@ -242,9 +427,9 @@ int main (int argc, char** argv) {
         client_config = readConfigFile(fd_config);
     }
 
-    //printConfigFile(client_config);
-
-    printInitMsg();
+    asprintf(&buffer, "\n%s user initialized\n", client_config.name);
+    printx(buffer);
+    cleanPointer(buffer);
 
     enterCommandMode();
     

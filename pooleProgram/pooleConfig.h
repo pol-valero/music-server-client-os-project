@@ -16,4 +16,6 @@ ServerConfig readConfigFile(int fd_config);
 
 void printConfigFile(ServerConfig client_config);
 
+void cleanServerConfig(ServerConfig* server_config);
+
 #endif

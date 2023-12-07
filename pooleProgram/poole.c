@@ -4,10 +4,11 @@
 #include "sys/select.h"
 #include <dirent.h>
 
-#define PATH "pooleProgram/data"
-
-//TODO: si hay tiempo crear una estructura para ficheros y directorios, crear variables globales y manejar-los en terminar ejecucion.
-////////
+/**
+ * 
+ * Structs
+ * 
+ */
 typedef struct {
     pthread_t threadClient;
     int fd_client;
@@ -19,103 +20,149 @@ typedef struct {
     int numClients;
 } ClientsSockets;
 
-ClientsSockets Clients;
+typedef struct {
+    char* name;
+    char* path;
+    char** songs;
+    int numSongs;
+} PlayList;
 
-ServerConfig server_config;  //This variable has to be global in order to be freed if the program is interrupted by a SIGNAL
+typedef struct {
+    PlayList* playList;
+    int numPlayList;
+} PlayLists;
 
-int fd_config;
-int fd_socket;
+/**
+ * 
+ * Global variables
+ * 
+ */
 
-void doDiscoveryHandshake() {
+ClientsSockets Clients = { NULL, 0 };
 
-    char* buffer;
+ServerConfig server_config = { NULL, NULL, NULL, 0, NULL, 0 };
 
-    int fd_socket = startServerConnection(server_config.ip_discovery, server_config.port_discovery);
+PlayLists playLists = { NULL, 0 };  
 
-    if (fd_socket < 0) {
-        printEr("ERROR: Cannot connect to the discovery server\n");
-        return;
-    }
+Frame receive = { 0, 0, NULL, NULL };
 
-    asprintf(&buffer, "%s&%s&%d", server_config.name, server_config.ip_poole, server_config.port_poole);
+char* buffer;
 
-    sendFrame(0x01, "NEW_POOLE", buffer, fd_socket);
+/**
+ * 
+ * Sockets file descriptors
+ * 
+ */
 
-    free(buffer);
+int fd_config = -1;
 
-    Frame responseFrame = receiveFrame(fd_socket);
+int fd_socket = -1;
 
-    //TODO: REMOVE
-    char buffer2[100];
-    sprintf(buffer2, "%d %d %s %s", responseFrame.type, responseFrame.header_length, responseFrame.header, responseFrame.data);
-    printx(buffer2);
-        
-    printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");
-    printx("\nWaiting for connections...\n\n");
+/**
+ * 
+ * Functions for load data of songs
+ * 
+ */
 
+void updatePlaylist(const char *playlistName) {
+    playLists.numPlayList++;
+    playLists.playList = realloc(playLists.playList, sizeof(PlayList) * playLists.numPlayList);
+
+    playLists.playList[playLists.numPlayList - 1].name = strdup(playlistName);
+    asprintf(&playLists.playList[playLists.numPlayList - 1].path, "%s/%s", PATH, playlistName);
+    playLists.playList[playLists.numPlayList - 1].songs = NULL;
+    playLists.playList[playLists.numPlayList - 1].numSongs = 0;
 }
 
-// Handle unexpected termination scenarios.
-void terminateExecution () {
+void updateSong(const char *SongName) {
+    playLists.playList[playLists.numPlayList - 1].numSongs++;
 
-    free(server_config.name);
-    free(server_config.files_folder);
-    free(server_config.ip_discovery);
-    free(server_config.ip_poole);
+    playLists.playList[playLists.numPlayList - 1].songs = realloc(
+        playLists.playList[playLists.numPlayList - 1].songs,
+        sizeof(char*) * playLists.playList[playLists.numPlayList - 1].numSongs
+    );
 
-    if (Clients.numClients != 0){
-        for (int i = 0; i < Clients.numClients; i++){
-            free(Clients.clientInfo[i].name);
-            close(Clients.clientInfo[i].fd_client);
+    playLists.playList[playLists.numPlayList - 1].songs[playLists.playList[playLists.numPlayList - 1].numSongs - 1] = strdup(SongName);
+}
+
+int loadSongs(const int fd_dir) {
+    DIR *dirp;
+    struct dirent *entry;
+    int fd;
+
+    if (fchdir(fd_dir) < 0) {
+        printEr("Error: Cannot change directory\n");
+        return -1;
+    }
+
+    close(fd_dir);
+
+    if ((dirp = opendir(".")) == NULL) {
+        printEr("Error: Cannot open directory\n");
+        return -2;
+    }
+
+    while ((entry = readdir(dirp)) != NULL) {
+        switch (entry->d_type) {
+            case DT_REG:
+                updateSong(entry->d_name);
+            break;
+            case DT_DIR:
+                if ((fd = open(entry->d_name, O_RDONLY)) < 0) {
+                    perror(entry->d_name);
+                } else {
+                    if ((strcmp(entry->d_name, ".") != 0) && (strcmp(entry->d_name, "..") != 0)) {
+                        updatePlaylist(entry->d_name);
+                        
+                        loadSongs(fd);
+                        chdir("..");
+                    }
+                }
+            break;
         }
-        free(Clients.clientInfo);
     }
+    closedir(dirp);
 
-    close (fd_config);
-
-    signal(SIGINT, SIG_DFL);
-    raise(SIGINT);
+    return 0;
 }
 
+void freePlayList(PlayList* playlist) {
+    free(playlist->name);
+    free(playlist->path);
 
-char** getFilesName(int *numFiles, char* pathToOpen){
-    DIR* dir = opendir(pathToOpen);
-
-    if (dir == NULL) {
-        return NULL;
+    for (int i = 0; i < playlist->numSongs; i++) {
+        free(playlist->songs[i]);
     }
 
-    struct dirent *input;
-    char** filesList = NULL;
-    *numFiles = 0;
+    free(playlist->songs);
+}
 
-    while ((input = readdir(dir)) != NULL) {
-        if (strcmp(input->d_name, ".") != 0 && strcmp(input->d_name, "..") != 0) {
-            filesList = realloc(filesList,sizeof(char*) * (*numFiles + 1));
-            asprintf(&filesList[*numFiles], "%s", input->d_name);
-
-            //printx(filesList[*numFiles]);
-
-            (*numFiles)++;
+void cleanPlayLists() {
+    //Free the memory allocated for the playLists
+    if (playLists.numPlayList > 0){
+        for (int i = 0; i < playLists.numPlayList; i++) {
+            freePlayList(&(playLists.playList[i]));
         }
+        free(playLists.playList);
     }
+} 
 
-    closedir(dir);
-
-    return filesList;
-   
-}
+/**
+ * 
+ * Functions for disconect client
+ * 
+ */
 
 void disconect(int fd_client){
-    if (Clients.numClients > 1){
+    if (Clients.numClients > 0){
         for (int i = 0; i < Clients.numClients; i++){
             if (Clients.clientInfo[i].fd_client == fd_client){
-                for (int j = i; j < Clients.numClients ; j++) {
-                    Clients.clientInfo[i].fd_client = Clients.clientInfo[i + 1].fd_client;
+                free(Clients.clientInfo[i].name);
+                for (int j = i; j < Clients.numClients - 1; j++) {
+                    Clients.clientInfo[j].fd_client = Clients.clientInfo[j + 1].fd_client;
                 }
                 (Clients.numClients)--;
                 Clients.clientInfo = realloc(Clients.clientInfo, sizeof(ClientInfo) * (Clients.numClients));
-                
                 break;
             }
         }
@@ -124,219 +171,278 @@ void disconect(int fd_client){
         free(Clients.clientInfo);
     }
     
-    sendFrame(0x06, "CONOK", "", fd_client);
-    close(fd_client);
+    sendFrame(0x06, RESPONSE_OK, "", fd_client);
+    cleanSockets(fd_client);
 }
 
-char** getAllPlaylists(int* n_playlists) {
-    char** playlists;
-    playlists = getFilesName(n_playlists, PATH);
-    return playlists;
-}
+/**
+ * 
+ * Functions for send all songs.
+ * 
+ */
 
-
-char** getAllSongs(int* n_songs) {
-
-    int n_playlists;
-    char** playlists = getAllPlaylists(&n_playlists);
-
-    int n_songs_playlist = 0;
-    char** songs_playlist;
-
-    char** songs = NULL;
-   int n_total_songs = 0;
-
-    char* playlistName;
-    char* pathToPlaylist;
-
-    for (int i = 0; i < n_playlists; i++) {
-        
-        playlistName = playlists[i];
-        asprintf(&pathToPlaylist, "%s/%s", PATH, playlistName);
-        songs_playlist = getFilesName(&n_songs_playlist, pathToPlaylist);
-        
-        for (int i = 0; i < n_songs_playlist; i++){
-            //write(STDOUT_FILENO, songs_playlist[i], strlen(songs_playlist[i]));
-            songs = realloc(songs, sizeof(char*) * (n_total_songs + 1));
-            songs[n_total_songs] = songs_playlist[i];
-            n_total_songs++;
-        }
-
-    
+void sendAllSongs(int fd_client) {
+    if (playLists.numPlayList == 0 || playLists.playList[0].numSongs == 0){
+        sendFrame(0x02, SONGS_RESPONSE, "NO_HAY_CANCIONES&0", fd_client);
+        return;
     }
+    int first = 1;
 
-    *n_songs = n_total_songs;
-    return songs;
-}
-
-//TODO: Remove this function, it is just for testing
-void printListString() {
-    int numFiles;
-    char** files;
-
-    //files = getAllPlaylists(&numFiles);
-    files = getAllSongs(&numFiles);
-    if (files != NULL){
-        for (int i = 0; i < numFiles; i++){
-            write(STDOUT_FILENO, files[i], strlen(files[i]));
-            free(files[i]);
-        }
-        free(files);
-    }else {
-        printx("Error en la lectura de archivos o carpeta vacia");
-    }
-}
-
-void sendAllSongs(char** songs, int n_songs, int fd_client) {
-    char* buffer;
-
-    char* header;
-
-    asprintf(&header, "SONGS_RESPONSE&%d", n_songs);
-
-    char* newFrameIncomingMsg = "NEW_FRAME_INCOMING";
-    char* newFrameNotIncomingMsg = "NEW_FRAME_NOT_INCOMING";
-
-
-    for (int i = 0; i < n_songs; i++){
-
-        if (i == 0) {
-
-            asprintf(&buffer, "%s", songs[i]);
-
-        } else {
-
-            asprintf(&buffer, "%s&%s", buffer, songs[i]);
-            if (i + 1 < n_songs && ( strlen(buffer) + strlen(songs[i + 1]) ) >= (256 -3 -(strlen(header) + 1) -strlen(newFrameIncomingMsg)) ) {
-                //The current frame is full, we need to attach a "newFrameIncomingMsg" at the end of the frame, send it, and create a new frame that will
-                asprintf(&buffer, "%s&%s", buffer, newFrameIncomingMsg);
-                sendFrame(0x02, header, buffer, fd_client);
+    char *tempBuffer;
+    asprintf(&buffer, "test");
+    for (int i = 0; i < playLists.numPlayList; i++){
+        for (int j = 0; j < playLists.playList[i].numSongs; j++){
+            if (strlen(buffer) + strlen(playLists.playList[i].songs[j]) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
+                if (first){
+                    free(buffer);
+                    asprintf(&buffer, "%s", playLists.playList[i].songs[j]);
+                    first = 0;
+                }else{
+                    asprintf(&tempBuffer, "%s&%s", buffer, playLists.playList[i].songs[j]);
+                    free(buffer);
+                    buffer = tempBuffer;
+                }
+            }else{
+                asprintf(&tempBuffer, "%s&1", buffer);
+                free(buffer); 
+                buffer = tempBuffer; 
+                sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
                 free(buffer);
 
-
-                asprintf(&buffer, "%s", songs[i + 1]);
-                i++;
+                asprintf(&buffer, "%s", playLists.playList[i].songs[j]);
             }
-
         }
     }
-    
-    asprintf(&buffer, "%s&%s", buffer, newFrameNotIncomingMsg);
-    sendFrame(0x02, header, buffer, fd_client);
+    asprintf(&tempBuffer, "%s&0", buffer);
+    free(buffer); 
+    buffer = tempBuffer;
+    sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
     free(buffer);
-
 }
 
-void sendAllPlaylists(/*char** playlists, int n_playlists, int fd_client*/) {
-    //Rewrite all 
-    
-    /*char* buffer;
+/**
+ * 
+ * Functions for send all playlists.
+ * 
+ */
 
-    char* header;
+void sendAllPlaylists(int fd_client) {
+    if (playLists.numPlayList == 0 || playLists.playList[0].numSongs == 0){
+        sendFrame(0x02, SONGS_RESPONSE, "NO_HAY_CANCIONES&0", fd_client);
+        return;
+    }
+    int first = 1;
+    asprintf(&buffer, "%s", playLists.playList[0].name);
 
-    asprintf(&header, "PLAYLISTS_RESPONSE&%d", n_playlists);
-
-    char* newFrameIncomingMsg = "NEW_FRAME_INCOMING";
-
-    for (int i = 0; i < n_playlists; i++){
-
-        if (i == 0) {
-
-            asprintf(&buffer, "%s", playlists[i]);
-
-        } else {
-
-            asprintf(&buffer, "%s&%s", buffer, playlists[i]);
-            if (i + 1 < n_playlists && ( strlen(buffer) + strlen(playlists[i + 1]) ) >= (256 -3 -(strlen(header) + 1) -strlen(newFrameIncomingMsg)) ) {
-                //The current frame is full, we need to attach a "newFrameIncomingMsg" at the end of the frame, send it, and create a new frame that will
-                asprintf(&buffer, "%s&%s", buffer, newFrameIncomingMsg);
-                sendFrame(0x02, header, buffer, fd_client);
+    char* tempBuffer;
+    for (int i = 0; i < playLists.numPlayList; i++){
+        if (!first){
+            if (strlen(buffer) + strlen(playLists.playList[i].name) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
+                asprintf(&tempBuffer, "%s#%s", buffer, playLists.playList[i].name);
                 free(buffer);
+                buffer = tempBuffer;
+            }else{
+                asprintf(&tempBuffer, "%s&2", buffer);
+                free(buffer);
+                buffer = tempBuffer;
+                sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
+                free(buffer);
+                
+                asprintf(&buffer, "%s", playLists.playList[i].name);
+            }
+        }else{
+            first = 0;
+        }
+        for (int j = 0; j < playLists.playList[i].numSongs; j++){
+            if (strlen(buffer) + strlen(playLists.playList[i].songs[j]) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
+                asprintf(&tempBuffer, "%s&%s", buffer, playLists.playList[i].songs[j]);
+                free(buffer);
+                buffer = tempBuffer;
+            }else{
+                asprintf(&tempBuffer, "%s&1", buffer);
+                free(buffer);
+                buffer = tempBuffer;
+                sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
+                free(buffer);
+
+                asprintf(&buffer, "%s", playLists.playList[i].songs[j]);
             }
         }
-    }*/
+        
+    }
+    
+    asprintf(&tempBuffer, "%s&0", buffer);
+    free(buffer);
+    buffer = tempBuffer;
+    sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
+    free(buffer);
 }
+
+/**
+ * 
+ * Functions manage the client petitions
+ * 
+ */
 
 void* runServer(void* arg){
     ClientInfo clientInfo = *((ClientInfo*)arg);
-    Frame receive;
-
     do{
+        cleanFrame(&receive);
         receive = receiveFrame(clientInfo.fd_client);
-        if(strcmp(receive.header, "LIST_SONGS") == 0){
-            printx("New request - ");
-            printx(clientInfo.name);
-            printx(" requires the list of songs.\n");
+        if(!strcmp(receive.header, LIST_SONGS)){
+            asprintf(&buffer, "New request - %s requires the list of songs.\n", clientInfo.name);
+            printQue(buffer);
+            free(buffer);
+            
+            sendAllSongs(clientInfo.fd_client);
 
-            //TODO: ParseList()
-            int n_songs = 0;
-            char** songs = getAllSongs(&n_songs);
-            sendAllSongs(songs, n_songs, clientInfo.fd_client);
+            asprintf(&buffer, "Sending song list to %s\n\n", clientInfo.name);
+            printRes(buffer);
+            free(buffer);
+        } else if(!strcmp(receive.header, LIST_PLAYLISTS)){
+            asprintf(&buffer, "New request - %s requires the list of playlists.\n", clientInfo.name);
+            printQue(buffer);
+            free(buffer);
+            
+            sendAllPlaylists(clientInfo.fd_client);
 
-            printx("Sending song list to ");
-            printx(clientInfo.name);
+            asprintf(&buffer, "Sending playlist list to %s\n\n", clientInfo.name);
+            printRes(buffer);
+            free(buffer);
+        }else if (!strcmp(receive.header, EXIT)){
+            asprintf(&buffer, "New request - %s requires disconnection\n", receive.data);
+            printQue(buffer);
+            free(buffer);
 
+            disconect(clientInfo.fd_client);
 
-        } else if(strcmp(receive.header, "LIST_PLAYLISTS") == 0){
-             printx("New request – ");
-            write(STDOUT_FILENO, clientInfo.name, strlen(clientInfo.name));
-            printx("Floyd requires the list of playlists.\n");
-
-            //TODO: ParseList()
-
-            printx("Sending song list to Floyd\n");
-            sendFrame(0x02, "PLAYLISTS_RESPONSE", "", clientInfo.fd_client);
-        }else if (!strcmp(receive.header, "EXIT")){
-            printx("User disconnected: ");
-            write(STDOUT_FILENO, receive.data, strlen(receive.data));
-            printx("\n");
-        }else if (!strcmp(receive.header, "UNKNOWN")){
-            printEr("Error: Error al recibir paquete\n");
+            asprintf(&buffer, "User -%s- disconnected\n\n", receive.data);
+            printRes(buffer);
+            free(buffer);
+        }else if (!strcmp(receive.header, UNKNOWN)){
+            printEr("Error: last packet sent was lost\n");
+        }else{
+            printEr("Error: Error receiving package\n");
+            sendFrame(0x02, UNKNOWN, "", clientInfo.fd_client);
         }
-    } while (strcmp(receive.header, "EXIT"));
-    
-    disconect(clientInfo.fd_client);
+    } while (strcmp(receive.header, EXIT));
 
     return NULL;
+}
+
+/**
+ * 
+ * Functions for configure the client
+ * 
+ */
+
+void configureClient(int fd_temp){
+    int index = Clients.numClients;
+        
+    if (index == 0){
+        Clients.clientInfo = malloc(sizeof(ClientInfo));
+    }else{
+        Clients.clientInfo = realloc(Clients.clientInfo, sizeof(ClientInfo) * (index + 1));
+    }
+    
+    (Clients.numClients)++;
+
+    Clients.clientInfo[index].fd_client = fd_temp;
+    Clients.clientInfo[index].name = strdup(receive.data);
+
+    pthread_create(&Clients.clientInfo[index].threadClient, NULL, runServer, &Clients.clientInfo[index]);
+
+    sendFrame(0x01, RESPONSE_OK, "", fd_temp);
+    
+    asprintf(&buffer, "New user connected: %s\n", Clients.clientInfo[index].name);
+    printx(buffer);
+    free(buffer);
 }
 
 void addClient(){
     struct sockaddr_in c_addr;
     socklen_t c_len = sizeof(c_addr);
 
-    
     int fd_temp = accept(fd_socket, (void *) &c_addr, &c_len);
-    Frame receive;
-    
+    if (fd_temp == -1){
+        printEr("ERROR: Problemas al acceptar client\n");
+        return;
+    }
+    cleanFrame(&receive);
     receive = receiveFrame(fd_temp);
 
-    if (!strcmp(receive.header, "NEW_BOWMAN")){
-        int index = Clients.numClients;
-        
-        if (index == 0){
-            Clients.clientInfo = malloc(sizeof(ClientInfo));
-        }else{
-            Clients.clientInfo = realloc(Clients.clientInfo, sizeof(ClientInfo) * (index + 1));
-        }
-        
-        (Clients.numClients)++;
-
-        Clients.clientInfo[index].fd_client = fd_temp;
-        pthread_create(&Clients.clientInfo[index].threadClient, NULL, runServer, &Clients.clientInfo[index]);
-
-        Clients.clientInfo->name = receive.data;
-
-        sendFrame(0x01, "CON_OK", "", fd_temp);
-
-        printx("New user connected: ");
-        write(STDOUT_FILENO, receive.data, strlen(receive.data));
-        printx("\n");
-
+    if (!strcmp(receive.header, BOWMAN_TO_POOLE)){
+        configureClient(fd_temp);
     }else{
-        sendFrame(0x07, "UNKNOWN", "", fd_temp);
-        close(fd_temp);
-        printEr("Error: Problemas al acceptar un cliente.");
+        sendFrame(0x07, UNKNOWN, "", fd_temp);
+        cleanSockets(fd_temp);
+        printEr("Error: Problemas al acceptar un cliente.\n");
     }
+}
+
+/**
+ * 
+ * Functions for connect to the discovery server
+ * 
+ */
+
+int doDiscoveryHandshake() {
+    int fd_socket = startServerConnection(server_config.ip_discovery, server_config.port_discovery);
+
+    if (fd_socket < 0) {
+        printEr("ERROR: Cannot connect to the discovery server\n");
+        return 0;
+    }
+
+    asprintf(&buffer, "%s&%s&%d", server_config.name, server_config.ip_poole, server_config.port_poole);
+
+    sendFrame(0x01, POOLE_TO_DISCOVERY, buffer, fd_socket);
+
+    free(buffer);
+
+    cleanFrame(&receive);
+    receive = receiveFrame(fd_socket);
+
+    if(!strcmp(receive.header, RESPONSE_OK)){
+        return 1;
+    }else if(!strcmp(receive.header, RESPONSE_KO)){
+        printEr("Discovery refused the connection\n");
+    }else if (!strcmp(receive.header, UNKNOWN)){
+        printEr("Error: last packet sent was lost\n");
+    }else{
+        printEr("Error: Error receiving package\n");
+        sendFrame(0x02, UNKNOWN, "", fd_socket);
+    }
+
+    return 0;
+}
+void cleanClientInfo(){
+    if (Clients.numClients > 0){
+        for (int i = 0; i < Clients.numClients; i++){
+            free(Clients.clientInfo[i].name);
+            cleanSockets(Clients.clientInfo[i].fd_client);
+        }
+        free(Clients.clientInfo);
+    }
+}
+
+// Handle unexpected termination scenarios.
+void terminateExecution () {
+    //Free the memory allocated for the server_config
+    cleanServerConfig(&server_config);
+    cleanFrame(&receive);
+    cleanClientInfo();
+    cleanPlayLists();
+
+    if(fd_socket != -1){
+        cleanSockets(fd_socket);
+    }
+    if(fd_config != -1){
+        cleanSockets(fd_config);
+    }
+
+    signal(SIGINT, SIG_DFL);
+    raise(SIGINT);
 }
 
 //main function :p
@@ -359,24 +465,31 @@ int main (int argc, char** argv) {
         printEr("\nERROR: Cannot open the file. Filename may be incorrect\n");
         return 0;
     }
+    
     printx("Reading configuration file\n");
     server_config = readConfigFile(fd_config);
 
-    //TODO:  REMOVE THESE LINES, THEY ARE JUST FOR TESTING
-
-    //printListString();
-
-    ///////////////////
-
     printx("Connecting Smyslov Server to the system..\n");
 
-    doDiscoveryHandshake();
+    int result = doDiscoveryHandshake();
     fd_socket = startServer(server_config.port_poole, server_config.ip_poole);
 
+    int current_dir;
 
+    current_dir = open (PATH, O_RDONLY);
+    if (current_dir == -1){
+        printEr("Error: Cannot open the directory\n");
+        return -1;
+    }
 
-    while (1){
-        addClient();
+    loadSongs(current_dir);
+
+    if (fd_socket != -1 && result){
+        printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");
+        printx("\nWaiting for connections...\n\n");
+        while (1){
+            addClient();
+        }
     }
     
     terminateExecution();

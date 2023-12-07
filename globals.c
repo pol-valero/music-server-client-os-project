@@ -130,9 +130,9 @@ int startServer(int port, char *ip) {
     socket_addr.sin_addr.s_addr = inet_addr(ip); //We convert IP string to a proper address for the in_addr structure
 
     if (bind (fd_socket, (void *)&socket_addr, sizeof(socket_addr)) < 0) {
-        printx("ERROR binding port\n");
+        printEr("ERROR binding port\n");
 
-        close(fd_socket);
+        cleanSockets(fd_socket);
 
         return -1;
     }
@@ -164,9 +164,9 @@ int startServerConnection(char* ip, int port) {
 
         if (connect(socket_conn, (void *) &socket_addr, sizeof(socket_addr)) < 0) {
             
-            asprintf(&buffer, "Connection error with the server: %s", strerror(errno));
+            asprintf(&buffer, "Connection error with the server: %s\n", strerror(errno));
             printx(buffer);
-            close(socket_conn);
+            cleanSockets(socket_conn);
             free(buffer);
 
             return -1;
@@ -177,8 +177,6 @@ int startServerConnection(char* ip, int port) {
     return socket_conn;
 
 }
-
-
 
 // Read characters until reaching either endChar or endChar2. If endChar2 is found, set endChar2Found to 1.
 char* readUntilEitherChar(int fd, char endChar, char endChar2, int* endChar2Found) {
@@ -287,3 +285,27 @@ char* readStringUntilChar(int startingPos, char* string, char endChar, int* endC
 void printDynStr(char* buffer, int bufferSize) {
      write(1, buffer, bufferSize);
 }
+
+void printQue(char *message) {
+    write(STDOUT_FILENO, ANSI_COLOR_BLUE, strlen(ANSI_COLOR_BLUE));
+    write(STDOUT_FILENO, message, strlen(message));
+    write(STDOUT_FILENO, ANSI_COLOR_RESET, strlen(ANSI_COLOR_RESET));
+}
+
+void printRes(char *message) {
+    write(STDOUT_FILENO, ANSI_COLOR_GREEN, strlen(ANSI_COLOR_GREEN));
+    write(STDOUT_FILENO, message, strlen(message));
+    write(STDOUT_FILENO, ANSI_COLOR_RESET, strlen(ANSI_COLOR_RESET));
+}
+
+void cleanFrame(Frame* frame) {
+    if (frame->header != NULL){
+        free(frame->header);
+        frame->header = NULL;
+    }
+    if (frame->data != NULL){
+        free(frame->data);
+        frame->data = NULL;
+    }
+}
+

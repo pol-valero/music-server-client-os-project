@@ -16,16 +16,53 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <pthread.h>
+#include <sys/wait.h>
 
 #define OK 1
 #define KO 0
 
+#define PATH "pooleProgram/data"
+
 // ANSI escape codes for text formatting
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
+#define ANSI_COLOR_BLUE "\x1b[34m"
+#define ANSI_COLOR_GREEN "\x1b[32m"
 
+//Macros
 #define printx(x) write(1, x, strlen(x))
 #define printEr(x) write(1, ANSI_COLOR_RED x ANSI_COLOR_RESET, strlen(ANSI_COLOR_RED x ANSI_COLOR_RESET))
+#define cleanPointer(ptr) do { \
+    free(ptr); \
+    ptr = NULL; \
+} while(0);
+#define cleanSockets(socket) do { \
+    close(socket); \
+    socket = -1; \
+} while(0);
+
+//Frame Headers (Query)
+#define POOLE_TO_DISCOVERY "NEW_POOLE"
+#define BOWMAN_TO_DISCOVERY "NEW_BOWMAN"
+#define BOWMAN_TO_POOLE "NEW_BOWMAN"
+#define LIST_SONGS "LIST_SONGS"
+#define LIST_PLAYLISTS "LIST_PLAYLISTS"
+#define DOWNLOAD_SONG "DOWNLOAD_SONG"
+#define DOWNLOAD_LIST "DOWNLOAD_LIST"
+#define EXIT "EXIT"
+
+//Frame Headers (Response)
+#define RESPONSE_OK "CON_OK"
+#define RESPONSE_KO "CON_KO"
+#define CHECK_OK "CHECK_OK"
+#define CHECK_KO "CHECK_KO"
+#define SONGS_RESPONSE "SONGS_RESPONSE"
+#define PLAYLISTS_RESPONSE "PLAYLISTS_RESPONSE"
+#define NEW_FILE "NEW_FILE"
+#define FILE_DATA "FILE_DATA"
+#define UNKNOWN "UNKNOWN"
+
+
 
 typedef struct {
     uint8_t type;                 //Frame type (1 byte)
@@ -59,5 +96,12 @@ char* readUntilCharExceptLetter(int fd, char endChar, char exception);
 char* readStringUntilChar(int startingPos, char* string, char endChar, int* endCharPos);
 
 void printDynStr(char* buffer, int bufferSize);
+
+void printQue(char* message);
+
+void printRes(char* message);
+
+void cleanFrame(Frame* frame);
+
 
 #endif

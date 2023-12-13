@@ -64,7 +64,7 @@ int fd_socket = -1;
  * 
  */
 
-void updatePlaylist(const char *playlistName) {
+void addPlaylist(const char *playlistName) {
     playLists.numPlayList++;
     playLists.playList = realloc(playLists.playList, sizeof(PlayList) * playLists.numPlayList);
 
@@ -74,7 +74,7 @@ void updatePlaylist(const char *playlistName) {
     playLists.playList[playLists.numPlayList - 1].numSongs = 0;
 }
 
-void updateSong(const char *SongName) {
+void addSongToCurrentPlaylist(const char *SongName) {
     playLists.playList[playLists.numPlayList - 1].numSongs++;
 
     playLists.playList[playLists.numPlayList - 1].songs = realloc(
@@ -85,7 +85,7 @@ void updateSong(const char *SongName) {
     playLists.playList[playLists.numPlayList - 1].songs[playLists.playList[playLists.numPlayList - 1].numSongs - 1] = strdup(SongName);
 }
 
-int loadSongs(const int fd_dir) {
+int loadPlaylists(const int fd_dir) {
     DIR *dirp;
     struct dirent *entry;
     int fd;
@@ -105,16 +105,18 @@ int loadSongs(const int fd_dir) {
     while ((entry = readdir(dirp)) != NULL) {
         switch (entry->d_type) {
             case DT_REG:
-                updateSong(entry->d_name);
+                if (strcmp(entry->d_name, ".DS_Store") != 0) {  //We ignore .DS_Store files
+                    addSongToCurrentPlaylist(entry->d_name);
+                }
             break;
             case DT_DIR:
                 if ((fd = open(entry->d_name, O_RDONLY)) < 0) {
                     perror(entry->d_name);
                 } else {
                     if ((strcmp(entry->d_name, ".") != 0) && (strcmp(entry->d_name, "..") != 0)) {
-                        updatePlaylist(entry->d_name);
+                        addPlaylist(entry->d_name);
                         
-                        loadSongs(fd);
+                        loadPlaylists(fd);
                         chdir("..");
                     }
                 }
@@ -482,7 +484,7 @@ int main (int argc, char** argv) {
         return -1;
     }
 
-    loadSongs(current_dir);
+    loadPlaylists(current_dir);
 
     if (fd_socket != -1 && result){
         printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");

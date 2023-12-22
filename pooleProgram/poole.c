@@ -3,6 +3,7 @@
 
 #include "sys/select.h"
 #include <dirent.h>
+#include "../semaphore_2v.h"
 
 /**
  * 
@@ -11,6 +12,9 @@
  */
 typedef struct {
     pthread_t threadClient;
+    pthread_t* threadPetitions;
+    semaphore sender;
+    int num_petitions;
     int fd_client;
     char* name;
 } ClientInfo;
@@ -31,14 +35,19 @@ typedef struct {
     PlayList* playList;
     int numPlayList;
 } PlayLists;
+typedef struct {
+    ClientInfo* ClientInfo;
+    char* song;
+} DownloadSong;
 
 /**
  * 
  * Global variables
  * 
  */
+semaphore clearClients;
 
-ClientsSockets Clients = { NULL, 0 };
+ClientsSockets clients = { NULL, 0 };
 
 ServerConfig server_config = { NULL, NULL, NULL, 0, NULL, 0 };
 
@@ -46,7 +55,7 @@ PlayLists playLists = { NULL, 0 };
 
 Frame receive = { 0, 0, NULL, NULL };
 
-char* buffer;
+char* buffer = NULL;
 
 /**
  * 
@@ -127,14 +136,14 @@ int loadSongs(const int fd_dir) {
 }
 
 void freePlayList(PlayList* playlist) {
-    free(playlist->name);
-    free(playlist->path);
+    cleanPointer(playlist->name);
+    cleanPointer(playlist->path);
 
     for (int i = 0; i < playlist->numSongs; i++) {
-        free(playlist->songs[i]);
+        cleanPointer(playlist->songs[i]);
     }
 
-    free(playlist->songs);
+    cleanPointer(playlist->songs);
 }
 
 void cleanPlayLists() {
@@ -143,7 +152,7 @@ void cleanPlayLists() {
         for (int i = 0; i < playLists.numPlayList; i++) {
             freePlayList(&(playLists.playList[i]));
         }
-        free(playLists.playList);
+        cleanPointer(playLists.playList);
     }
 } 
 
@@ -153,26 +162,32 @@ void cleanPlayLists() {
  * 
  */
 
-void disconect(int fd_client){
-    if (Clients.numClients > 0){
-        for (int i = 0; i < Clients.numClients; i++){
-            if (Clients.clientInfo[i].fd_client == fd_client){
-                free(Clients.clientInfo[i].name);
-                for (int j = i; j < Clients.numClients - 1; j++) {
-                    Clients.clientInfo[j].fd_client = Clients.clientInfo[j + 1].fd_client;
-                }
-                (Clients.numClients)--;
-                Clients.clientInfo = realloc(Clients.clientInfo, sizeof(ClientInfo) * (Clients.numClients));
-                break;
+void disconect(void* arg){
+    ClientInfo* clientInfo = (ClientInfo*)arg;
+    //TODO: manage phtreads, semaphores and sockets
+    SEM_wait(&clearClients);
+    for (int i = 0; i < clients.numClients; i++){
+        if (clients.clientInfo[i].fd_client == clientInfo->fd_client){
+            cleanPointer(clients.clientInfo[i].name);
+            for(int j = 0; j < clients.clientInfo[i].num_petitions; j++){
+                pthread_join(clients.clientInfo[i].threadPetitions[j], NULL);
             }
+            free(clients.clientInfo[i].threadPetitions);
+            SEM_destructor(&clients.clientInfo[i].sender);
+
+            //This is for reallocate al the list of clients.
+            for (int j = i; j < clients.numClients - 1; j++) {
+                clients.clientInfo[j].fd_client = clients.clientInfo[j + 1].fd_client;
+            }
+            (clients.numClients)--;
+            //clients.clientInfo = realloc(clients.clientInfo, sizeof(ClientInfo) * (clients.numClients));  //TODO: solve this problem
+            break;
         }
-    }else {
-        (Clients.numClients)--;
-        free(Clients.clientInfo);
     }
-    
-    sendFrame(0x06, RESPONSE_OK, "", fd_client);
-    cleanSockets(fd_client);
+    SEM_signal(&clearClients);
+        
+    sendFrame(0x06, RESPONSE_OK, "", clientInfo->fd_client);
+    cleanSockets(clientInfo->fd_client);
 }
 
 /**
@@ -181,43 +196,53 @@ void disconect(int fd_client){
  * 
  */
 
-void sendAllSongs(int fd_client) {
+void* sendAllSongs(void* arg) {
+    ClientInfo* clientInfo = (ClientInfo*)arg;
+
     if (playLists.numPlayList == 0 || playLists.playList[0].numSongs == 0){
-        sendFrame(0x02, SONGS_RESPONSE, "NO_HAY_CANCIONES&0", fd_client);
-        return;
+        SEM_wait(&clientInfo->sender);
+        sendFrame(0x02, SONGS_RESPONSE, "NO_HAY_CANCIONES&0", clientInfo->fd_client);
+        SEM_signal(&clientInfo->sender);
+        return NULL;
     }
     int first = 1;
 
     char *tempBuffer;
-    asprintf(&buffer, "test");
+    asprintf(&buffer, "test"); //TODO: memory leak
     for (int i = 0; i < playLists.numPlayList; i++){
         for (int j = 0; j < playLists.playList[i].numSongs; j++){
             if (strlen(buffer) + strlen(playLists.playList[i].songs[j]) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
                 if (first){
-                    free(buffer);
+                    cleanPointer(buffer);
                     asprintf(&buffer, "%s", playLists.playList[i].songs[j]);
                     first = 0;
                 }else{
                     asprintf(&tempBuffer, "%s&%s", buffer, playLists.playList[i].songs[j]);
-                    free(buffer);
+                    cleanPointer(buffer);
                     buffer = tempBuffer;
                 }
             }else{
                 asprintf(&tempBuffer, "%s&1", buffer);
-                free(buffer); 
-                buffer = tempBuffer; 
-                sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
-                free(buffer);
+                cleanPointer(buffer); 
+                buffer = tempBuffer;
+                SEM_wait(&clientInfo->sender);
+                sendFrame(0x02, SONGS_RESPONSE, buffer, clientInfo->fd_client);
+                SEM_signal(&clientInfo->sender);
+                cleanPointer(buffer);
 
                 asprintf(&buffer, "%s", playLists.playList[i].songs[j]);
             }
         }
     }
     asprintf(&tempBuffer, "%s&0", buffer);
-    free(buffer); 
+    cleanPointer(buffer); 
     buffer = tempBuffer;
-    sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
-    free(buffer);
+    SEM_wait(&clientInfo->sender);
+    sendFrame(0x02, SONGS_RESPONSE, buffer, clientInfo->fd_client);
+    SEM_signal(&clientInfo->sender);
+    cleanPointer(buffer);
+
+    return NULL;
 }
 
 /**
@@ -226,10 +251,13 @@ void sendAllSongs(int fd_client) {
  * 
  */
 
-void sendAllPlaylists(int fd_client) {
+void* sendAllPlaylists(void* arg) {
+    ClientInfo* clientInfo = (ClientInfo*)arg;
     if (playLists.numPlayList == 0 || playLists.playList[0].numSongs == 0){
-        sendFrame(0x02, SONGS_RESPONSE, "NO_HAY_CANCIONES&0", fd_client);
-        return;
+        SEM_wait(&clientInfo->sender);
+        sendFrame(0x02, SONGS_RESPONSE, "NO_HAY_CANCIONES&0", clientInfo->fd_client);
+        SEM_signal(&clientInfo->sender);
+        return NULL;
     }
     int first = 1;
     asprintf(&buffer, "%s", playLists.playList[0].name);
@@ -239,14 +267,16 @@ void sendAllPlaylists(int fd_client) {
         if (!first){
             if (strlen(buffer) + strlen(playLists.playList[i].name) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
                 asprintf(&tempBuffer, "%s#%s", buffer, playLists.playList[i].name);
-                free(buffer);
+                cleanPointer(buffer);
                 buffer = tempBuffer;
             }else{
                 asprintf(&tempBuffer, "%s&2", buffer);
-                free(buffer);
+                cleanPointer(buffer);
                 buffer = tempBuffer;
-                sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
-                free(buffer);
+                SEM_wait(&clientInfo->sender);
+                sendFrame(0x02, SONGS_RESPONSE, buffer, clientInfo->fd_client);
+                SEM_signal(&clientInfo->sender);
+                cleanPointer(buffer);
                 
                 asprintf(&buffer, "%s", playLists.playList[i].name);
             }
@@ -256,14 +286,16 @@ void sendAllPlaylists(int fd_client) {
         for (int j = 0; j < playLists.playList[i].numSongs; j++){
             if (strlen(buffer) + strlen(playLists.playList[i].songs[j]) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
                 asprintf(&tempBuffer, "%s&%s", buffer, playLists.playList[i].songs[j]);
-                free(buffer);
+                cleanPointer(buffer);
                 buffer = tempBuffer;
             }else{
                 asprintf(&tempBuffer, "%s&1", buffer);
-                free(buffer);
+                cleanPointer(buffer);
                 buffer = tempBuffer;
-                sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
-                free(buffer);
+                SEM_wait(&clientInfo->sender);
+                sendFrame(0x02, SONGS_RESPONSE, buffer, clientInfo->fd_client);
+                SEM_signal(&clientInfo->sender);
+                cleanPointer(buffer);
 
                 asprintf(&buffer, "%s", playLists.playList[i].songs[j]);
             }
@@ -272,11 +304,30 @@ void sendAllPlaylists(int fd_client) {
     }
     
     asprintf(&tempBuffer, "%s&0", buffer);
-    free(buffer);
+    cleanPointer(buffer);
     buffer = tempBuffer;
-    sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
-    free(buffer);
+    SEM_wait(&clientInfo->sender);
+    sendFrame(0x02, SONGS_RESPONSE, buffer, clientInfo->fd_client);
+    SEM_signal(&clientInfo->sender);
+    cleanPointer(buffer);
+
+    return NULL;
 }
+
+/**
+ * 
+ * Functions for download the song 
+ * 
+ */
+
+void* downloadSong(void* arg);
+
+/**
+ * 
+ * Functions for download a list of songs 
+ * 
+ */
+void* downloadListSongs(void* arg);
 
 /**
  * 
@@ -285,47 +336,71 @@ void sendAllPlaylists(int fd_client) {
  */
 
 void* runServer(void* arg){
-    ClientInfo clientInfo = *((ClientInfo*)arg);
+    ClientInfo* clientInfo = (ClientInfo*)arg;
+    pthread_cleanup_push(disconect, clientInfo);
     do{
         cleanFrame(&receive);
-        receive = receiveFrame(clientInfo.fd_client);
+        receive = receiveFrame(clientInfo->fd_client);
         if(!strcmp(receive.header, LIST_SONGS)){
-            asprintf(&buffer, "New request - %s requires the list of songs.\n", clientInfo.name);
+            asprintf(&buffer, "New request - %s requires the list of songs.\n", clientInfo->name);
             printQue(buffer);
-            free(buffer);
-            
-            sendAllSongs(clientInfo.fd_client);
+            cleanPointer(buffer);
 
-            asprintf(&buffer, "Sending song list to %s\n\n", clientInfo.name);
+            clientInfo->num_petitions++;
+            clientInfo->threadPetitions = realloc(clientInfo->threadPetitions, sizeof(pthread_t) * clientInfo->num_petitions);
+            pthread_create(&clientInfo->threadPetitions[clientInfo->num_petitions - 1], NULL, sendAllSongs, clientInfo);
+
+            asprintf(&buffer, "Sending song list to %s\n\n", clientInfo->name);
             printRes(buffer);
-            free(buffer);
-        } else if(!strcmp(receive.header, LIST_PLAYLISTS)){
-            asprintf(&buffer, "New request - %s requires the list of playlists.\n", clientInfo.name);
+            cleanPointer(buffer);
+        }else if(!strcmp(receive.header, LIST_PLAYLISTS)){
+            asprintf(&buffer, "New request - %s requires the list of playlists.\n", clientInfo->name);
             printQue(buffer);
-            free(buffer);
+            cleanPointer(buffer);
             
-            sendAllPlaylists(clientInfo.fd_client);
+            clientInfo->num_petitions++;
+            clientInfo->threadPetitions = realloc(clientInfo->threadPetitions, sizeof(pthread_t) * clientInfo->num_petitions);
+            pthread_create(&clientInfo->threadPetitions[clientInfo->num_petitions - 1], NULL, sendAllPlaylists, clientInfo);
 
-            asprintf(&buffer, "Sending playlist list to %s\n\n", clientInfo.name);
+            asprintf(&buffer, "Sending playlist list to %s\n\n", clientInfo->name);
             printRes(buffer);
-            free(buffer);
+            cleanPointer(buffer);
+        }else if(!strcmp(receive.header, DOWNLOAD_SONG)){
+            asprintf(&buffer, "New request – %s wants to download %s\n", clientInfo->name, receive.data);
+            printQue(buffer);
+            cleanPointer(buffer);
+
+            asprintf(&buffer,"Sending %s to %s\n\n", receive.data,clientInfo->name);
+            printRes(buffer);
+            cleanPointer(buffer);
+        }else if(!strcmp(receive.header, DOWNLOAD_LIST)){
+            asprintf(&buffer, "New request – %s wants to download the playlist %s.\n", clientInfo->name, receive.data);
+            printQue(buffer);
+            cleanPointer(buffer);
+
+            asprintf(&buffer,"Sending %s to %s.\n\n", receive.data,clientInfo->name);
+            printRes(buffer);
+            cleanPointer(buffer);
+        }else if (!strcmp(receive.header, UNKNOWN)){
+            printEr("Error: last packet sent was lost\n");
         }else if (!strcmp(receive.header, EXIT)){
             asprintf(&buffer, "New request - %s requires disconnection\n", receive.data);
             printQue(buffer);
-            free(buffer);
-
-            disconect(clientInfo.fd_client);
-
-            asprintf(&buffer, "User -%s- disconnected\n\n", receive.data);
-            printRes(buffer);
-            free(buffer);
-        }else if (!strcmp(receive.header, UNKNOWN)){
-            printEr("Error: last packet sent was lost\n");
-        }else{
+            cleanPointer(buffer);
+        }
+        else{
             printEr("Error: Error receiving package\n");
-            sendFrame(0x02, UNKNOWN, "", clientInfo.fd_client);
+            sendFrame(0x02, UNKNOWN, "", clientInfo->fd_client);
         }
     } while (strcmp(receive.header, EXIT));
+
+    
+
+    pthread_cleanup_pop(1);
+
+    asprintf(&buffer, "User -%s- disconnected\n\n", receive.data);
+    printRes(buffer);
+    cleanPointer(buffer);
 
     return NULL;
 }
@@ -337,26 +412,35 @@ void* runServer(void* arg){
  */
 
 void configureClient(int fd_temp){
-    int index = Clients.numClients;
-        
-    if (index == 0){
-        Clients.clientInfo = malloc(sizeof(ClientInfo));
-    }else{
-        Clients.clientInfo = realloc(Clients.clientInfo, sizeof(ClientInfo) * (index + 1));
-    }
+    SEM_wait(&clearClients);
+    int index = clients.numClients;
     
-    (Clients.numClients)++;
+    //TODO: manage the threads from the client who had disconected already
+    clients.clientInfo = realloc(clients.clientInfo, sizeof(ClientInfo) * (index + 1));
+    
+    
+    (clients.numClients)++;
 
-    Clients.clientInfo[index].fd_client = fd_temp;
-    Clients.clientInfo[index].name = strdup(receive.data);
+    clients.clientInfo[index].fd_client = fd_temp;
+    clients.clientInfo[index].name = strdup(receive.data);
 
-    pthread_create(&Clients.clientInfo[index].threadClient, NULL, runServer, &Clients.clientInfo[index]);
+    clients.clientInfo[index].num_petitions = 0;
+    clients.clientInfo[index].threadPetitions = NULL;
 
+    SEM_constructor_with_name(&clients.clientInfo[index].sender, ftok(receive.data, clients.numClients));
+    SEM_init(&clients.clientInfo[index].sender, 1);
+
+    pthread_create(&clients.clientInfo[index].threadClient, NULL, runServer, &clients.clientInfo[index]);
+    
+    SEM_signal(&clearClients);
+
+    SEM_wait(&clients.clientInfo[index].sender);
     sendFrame(0x01, RESPONSE_OK, "", fd_temp);
+    SEM_signal(&clients.clientInfo[index].sender);
     
-    asprintf(&buffer, "New user connected: %s\n", Clients.clientInfo[index].name);
+    asprintf(&buffer, "New user connected: %s\n", clients.clientInfo[index].name);
     printx(buffer);
-    free(buffer);
+    cleanPointer(buffer);
 }
 
 void addClient(){
@@ -398,7 +482,7 @@ int doDiscoveryHandshake() {
 
     sendFrame(0x01, POOLE_TO_DISCOVERY, buffer, fd_socket);
 
-    free(buffer);
+    cleanPointer(buffer);
 
     cleanFrame(&receive);
     receive = receiveFrame(fd_socket);
@@ -416,13 +500,16 @@ int doDiscoveryHandshake() {
 
     return 0;
 }
+
 void cleanClientInfo(){
-    if (Clients.numClients > 0){
-        for (int i = 0; i < Clients.numClients; i++){
-            free(Clients.clientInfo[i].name);
-            cleanSockets(Clients.clientInfo[i].fd_client);
+    if (clients.numClients > 0){
+        for (int i = 0; i < clients.numClients; i++){
+            cleanPointer(clients.clientInfo[i].name);
+            cleanSockets(clients.clientInfo[i].fd_client);
+            pthread_cancel(clients.clientInfo[i].threadClient);
+            pthread_join(clients.clientInfo[i].threadClient,NULL);
         }
-        free(Clients.clientInfo);
+        cleanPointer(clients.clientInfo);
     }
 }
 
@@ -434,12 +521,16 @@ void terminateExecution () {
     cleanClientInfo();
     cleanPlayLists();
 
+    SEM_destructor(&clearClients);
+
     if(fd_socket != -1){
         cleanSockets(fd_socket);
     }
     if(fd_config != -1){
         cleanSockets(fd_config);
     }
+
+    pthread_exit(NULL);
 
     signal(SIGINT, SIG_DFL);
     raise(SIGINT);
@@ -450,6 +541,10 @@ int main (int argc, char** argv) {
 
     signal(SIGINT, terminateExecution);
     signal(SIGTERM, terminateExecution);
+
+    //This is for the semaphore which delete a client from the list of client
+    SEM_constructor_with_name(&clearClients, ftok("clearSender", 7));
+    SEM_init(&clearClients, 1);
 
     if (argc < 2) {
         printEr("\nERROR: You must enter a the configuration file name as a parameter\n");

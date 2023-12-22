@@ -62,8 +62,6 @@
 #define FILE_DATA "FILE_DATA"
 #define UNKNOWN "UNKNOWN"
 
-
-
 typedef struct {
     uint8_t type;                 //Frame type (1 byte)
     uint16_t header_length;    //Frame header length (2 bytes)

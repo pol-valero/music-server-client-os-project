@@ -342,7 +342,7 @@ void enterCommandMode() {
                 
                 break;
             case DOWNLOAD_SONG_CMD:
-                printRes("Comanda OK\n");
+                sendFrame(0x02, DOWNLOAD_SONG, "Song2.mp3", fd_socket);
                 break;
             case DOWNLOAD_PLAYLIST_CMD:
                 printRes("Comanda OK\n");

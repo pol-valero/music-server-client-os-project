@@ -322,7 +322,79 @@ void* sendAllPlaylists(void* arg) {
 
 void* downloadSong(void* arg);
 
-char* checkSongMD5SUM (char* path);
+char* checkSongMD5SUM (char* path){
+    char *openssl_command[] = {"md5sum", path, NULL};
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        perror("pipe");
+        return NULL;
+    }
+
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        perror("fork");
+         return NULL;
+    }
+
+    if (pid == 0) {  // Proceso hijo
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO); 
+
+        execvp("md5sum", openssl_command);
+
+        perror("execvp");
+        return NULL;
+    } else {  // Proceso padre
+        close(pipefd[1]);
+
+        int status;
+        waitpid(pid, &status, 0); 
+
+        if (WIFEXITED(status)) {
+            // Read the output of the md5sum command from the pipe
+            buffer = malloc (sizeof(char) * 1024);
+            
+            ssize_t bytesRead;
+            
+            bytesRead = read(pipefd[0], buffer, 1024);
+            buffer[bytesRead] = '\0';
+            
+            char *token = strtok(buffer, " ");
+            
+            close(pipefd[0]);
+
+            return token;
+        } else {
+            printEr("El proceso hijo terminó con error.\n");
+            close(pipefd[0]);
+        }
+
+        close(pipefd[0]);
+    }
+
+    cleanPointer(path);
+
+    return NULL;
+}
+
+long getLenghtArchive(const char *path) {
+    struct stat statArchivo;
+
+    if (stat(path, &statArchivo) == -1) {
+        perror("Error al obtener información del archivo");
+        return -1;
+    }
+
+    return statArchivo.st_size;
+}
+
+int getID() {
+    srand((unsigned int)time(NULL));
+
+    return rand();
+}
 
 void processDownloadSong(char* name){
     char* path = NULL;
@@ -340,59 +412,14 @@ void processDownloadSong(char* name){
         printEr("Error: The song doesn't exist\n");
         return;
     }
+    
+    char* md5sum = checkSongMD5SUM(path);
+    long lenght = getLenghtArchive(path);
+    int id = getID();
 
-    char *openssl_command[] = {"md5sum", path, NULL};
-
-    int pipefd[2];
-    if (pipe(pipefd) == -1) {
-        perror("pipe");
-        exit(EXIT_FAILURE);
-    }
-
-    pid_t pid = fork();
-
-    if (pid == -1) {
-        perror("fork");
-        exit(EXIT_FAILURE);
-    }
-
-    if (pid == 0) {  // Proceso hijo
-        close(pipefd[0]);  // Cerrar el extremo de lectura del tubo
-        dup2(pipefd[1], STDOUT_FILENO);  // Redirigir la salida estándar al tubo
-
-        execvp("md5sum", openssl_command);
-
-        perror("execvp");
-        exit(EXIT_FAILURE);
-    } else {  // Proceso padre
-        close(pipefd[1]);  // Cerrar el extremo de escritura del tubo
-
-        int status;
-        waitpid(pid, &status, 0);  // Esperamos a que el hijo termine
-
-        if (WIFEXITED(status)) {
-            // Read the output of the md5sum command from the pipe
-            buffer = malloc (sizeof(char) * 1024);
-            
-            ssize_t bytesRead;
-            
-            bytesRead = read(pipefd[0], buffer, 1024);
-            buffer[bytesRead] = '\0';
-            
-            char *token = strtok(buffer, " ");
-            printx(token);
-            
-            cleanPointer(token);
-        } else {
-            printEr("El proceso hijo terminó con error.\n");
-        }
-
-         // Close the read end of the pipe
-        close(pipefd[0]);
-    }
+    
     cleanPointer(path);
-
-}
+}   
 
 /**
  * 

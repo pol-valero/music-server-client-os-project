@@ -73,17 +73,17 @@ int fd_socket = -1;
  * 
  */
 
-void addPlaylist(const char *playlistName) {
+void updatePlaylist(const char *playlistName) {
     playLists.numPlayList++;
     playLists.playList = realloc(playLists.playList, sizeof(PlayList) * playLists.numPlayList);
 
     playLists.playList[playLists.numPlayList - 1].name = strdup(playlistName);
-    asprintf(&playLists.playList[playLists.numPlayList - 1].path, "%s/%s", PATH, playlistName);
+    asprintf(&playLists.playList[playLists.numPlayList - 1].path, "%s", playlistName); //TODO: Write this better
     playLists.playList[playLists.numPlayList - 1].songs = NULL;
     playLists.playList[playLists.numPlayList - 1].numSongs = 0;
 }
 
-void addSongToCurrentPlaylist(const char *SongName) {
+void updateSong(const char *SongName) {
     playLists.playList[playLists.numPlayList - 1].numSongs++;
 
     playLists.playList[playLists.numPlayList - 1].songs = realloc(
@@ -94,7 +94,7 @@ void addSongToCurrentPlaylist(const char *SongName) {
     playLists.playList[playLists.numPlayList - 1].songs[playLists.playList[playLists.numPlayList - 1].numSongs - 1] = strdup(SongName);
 }
 
-int loadPlaylists(const int fd_dir) {
+int loadSongs(const int fd_dir) {
     DIR *dirp;
     struct dirent *entry;
     int fd;
@@ -114,18 +114,16 @@ int loadPlaylists(const int fd_dir) {
     while ((entry = readdir(dirp)) != NULL) {
         switch (entry->d_type) {
             case DT_REG:
-                if (strcmp(entry->d_name, ".DS_Store") != 0) {  //We ignore .DS_Store files
-                    addSongToCurrentPlaylist(entry->d_name);
-                }
+                updateSong(entry->d_name);
             break;
             case DT_DIR:
                 if ((fd = open(entry->d_name, O_RDONLY)) < 0) {
                     perror(entry->d_name);
                 } else {
                     if ((strcmp(entry->d_name, ".") != 0) && (strcmp(entry->d_name, "..") != 0)) {
-                        addPlaylist(entry->d_name);
+                        updatePlaylist(entry->d_name);
                         
-                        loadPlaylists(fd);
+                        loadSongs(fd);
                         chdir("..");
                     }
                 }
@@ -324,6 +322,78 @@ void* sendAllPlaylists(void* arg) {
 
 void* downloadSong(void* arg);
 
+char* checkSongMD5SUM (char* path);
+
+void processDownloadSong(char* name){
+    char* path = NULL;
+
+    for (int i = 0; i < playLists.numPlayList; i++)    {
+        for (int j = 0; j < playLists.playList[i].numSongs; j++){
+            if (!strcmp(name, playLists.playList[i].songs[j])){
+                asprintf(&path, "%s/%s", playLists.playList[i].path, name);
+                break;
+            }
+        }
+    }
+
+    if (path == NULL){
+        printEr("Error: The song doesn't exist\n");
+        return;
+    }
+
+    char *openssl_command[] = {"md5sum", path, NULL};
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        perror("pipe");
+        exit(EXIT_FAILURE);
+    }
+
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        perror("fork");
+        exit(EXIT_FAILURE);
+    }
+
+    if (pid == 0) {  // Proceso hijo
+        close(pipefd[0]);  // Cerrar el extremo de lectura del tubo
+        dup2(pipefd[1], STDOUT_FILENO);  // Redirigir la salida estándar al tubo
+
+        execvp("md5sum", openssl_command);
+
+        perror("execvp");
+        exit(EXIT_FAILURE);
+    } else {  // Proceso padre
+        close(pipefd[1]);  // Cerrar el extremo de escritura del tubo
+
+        int status;
+        waitpid(pid, &status, 0);  // Esperamos a que el hijo termine
+
+        if (WIFEXITED(status)) {
+            // Read the output of the md5sum command from the pipe
+            buffer = malloc (sizeof(char) * 1024);
+            
+            ssize_t bytesRead;
+            
+            bytesRead = read(pipefd[0], buffer, 1024);
+            buffer[bytesRead] = '\0';
+            
+            char *token = strtok(buffer, " ");
+            printx(token);
+            
+            cleanPointer(token);
+        } else {
+            printEr("El proceso hijo terminó con error.\n");
+        }
+
+         // Close the read end of the pipe
+        close(pipefd[0]);
+    }
+    cleanPointer(path);
+
+}
+
 /**
  * 
  * Functions for download a list of songs 
@@ -371,6 +441,8 @@ void* runServer(void* arg){
             asprintf(&buffer, "New request – %s wants to download %s\n", clientInfo->name, receive.data);
             printQue(buffer);
             cleanPointer(buffer);
+
+            processDownloadSong(receive.data);
 
             asprintf(&buffer,"Sending %s to %s\n\n", receive.data,clientInfo->name);
             printRes(buffer);
@@ -579,7 +651,7 @@ int main (int argc, char** argv) {
         return -1;
     }
 
-    loadPlaylists(current_dir);
+    loadSongs(current_dir);
 
     if (fd_socket != -1 && result){
         printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");

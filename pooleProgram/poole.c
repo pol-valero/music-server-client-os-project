@@ -37,7 +37,11 @@ typedef struct {
 } PlayLists;
 typedef struct {
     ClientInfo* ClientInfo;
-    char* song;
+    int id;
+    long lenght;
+    char* songName;
+    char* md5sum;
+    char* path;
 } DownloadSong;
 
 /**
@@ -320,7 +324,7 @@ void* sendAllPlaylists(void* arg) {
  * 
  */
 
-void* downloadSong(void* arg);
+
 
 char* checkSongMD5SUM (char* path){
     char *openssl_command[] = {"md5sum", path, NULL};
@@ -396,30 +400,66 @@ int getID() {
     return rand();
 }
 
-void processDownloadSong(char* name){
-    char* path = NULL;
-
+char* getSongPath (char* name){
     for (int i = 0; i < playLists.numPlayList; i++)    {
         for (int j = 0; j < playLists.playList[i].numSongs; j++){
             if (!strcmp(name, playLists.playList[i].songs[j])){
-                asprintf(&path, "%s/%s", playLists.playList[i].path, name);
-                break;
+                asprintf(&buffer, "%s/%s", playLists.playList[i].path, name);
+                return buffer;
             }
         }
     }
+    return NULL;
+}
 
-    if (path == NULL){
+void* downloadSong(void* arg);
+
+void clearDownloadSong(DownloadSong* downloadSong){
+    if (downloadSong->songName != NULL){
+        cleanPointer(downloadSong->songName);
+    }
+    if (downloadSong->md5sum != NULL){
+        cleanPointer(downloadSong->md5sum);
+    }
+    if (downloadSong->path != NULL){
+        cleanPointer(downloadSong->path);
+    }
+}
+
+void processDownloadSong(char* name, ClientInfo* clientInfo){
+    DownloadSong downloadSong = { NULL, -1, -1, NULL, NULL, NULL };
+
+    downloadSong.songName = strdup(name);
+    downloadSong.path = getSongPath(downloadSong.songName);
+    if(downloadSong.path == NULL){
         printEr("Error: The song doesn't exist\n");
+        return;
+    }    
+    downloadSong.md5sum = checkSongMD5SUM(downloadSong.path);
+    if(downloadSong.md5sum == NULL){
+        printEr("Error: The md5sum of the song is NULL\n");
+        return;
+    }
+    downloadSong.lenght = getLenghtArchive(downloadSong.path);
+    if(downloadSong.lenght == -1){
+        printEr("Error: The lenght of the song is -1\n");
+        return;
+    }
+    downloadSong.id = getID();
+    if(downloadSong.id == -1){
+        printEr("Error: The id of the song is -1\n");
         return;
     }
     
-    char* md5sum = checkSongMD5SUM(path);
-    long lenght = getLenghtArchive(path);
-    int id = getID();
+    downloadSong.ClientInfo = clientInfo;
 
+    asprintf(&buffer, "%s&%ld&%s&%d", downloadSong.songName, downloadSong.lenght, downloadSong.md5sum, downloadSong.id);
+    SEM_wait(&clientInfo->sender);
+    sendFrame(0x02, NEW_FILE, buffer, clientInfo->fd_client);
+    SEM_signal(&clientInfo->sender);
+    cleanPointer(buffer);
     
-    cleanPointer(path);
-}   
+}
 
 /**
  * 
@@ -469,7 +509,7 @@ void* runServer(void* arg){
             printQue(buffer);
             cleanPointer(buffer);
 
-            processDownloadSong(receive.data);
+            processDownloadSong(receive.data, clientInfo);
 
             asprintf(&buffer,"Sending %s to %s\n\n", receive.data,clientInfo->name);
             printRes(buffer);

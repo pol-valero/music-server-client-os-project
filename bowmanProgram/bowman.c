@@ -286,8 +286,6 @@ void enterCommandMode() {
     char* command;
     int command_case_num;
 
-    //int resultSongs = -1;
-    //int resultPlaylists = -1;
     do {
 
         printx("\n$ ");
@@ -343,6 +341,9 @@ void enterCommandMode() {
                 break;
             case DOWNLOAD_SONG_CMD:
                 sendFrame(0x02, DOWNLOAD_SONG, "Song2.mp3", fd_socket);
+                cleanFrame(&receive);
+                receive = receiveFrame(fd_socket);
+                printx(receive.data);
                 break;
             case DOWNLOAD_PLAYLIST_CMD:
                 printRes("Comanda OK\n");

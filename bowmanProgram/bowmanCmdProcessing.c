@@ -142,7 +142,6 @@ char* readSecondCommandWord(char* command) {
     command2[j] = '\0';
 
     return command2;
-    
 }
 
 // Process a single-word command.
@@ -202,7 +201,7 @@ int processDoubleWordCmd(char* command1, char* command2) {
 }
 
 // Function to convert a command (cmd) to an integer.
-int commandToCmdCaseNum(char* command) {
+int commandToCmdCaseNum(char* command, char** SecondCommandWord) {
 
     int command_case_num = NO_CMD;
 
@@ -231,6 +230,9 @@ int commandToCmdCaseNum(char* command) {
         //The command has two words 
 
         command2 = readSecondCommandWord(command);
+        *SecondCommandWord = strdup(command2);
+        
+        
 
         command_case_num = processDoubleWordCmd(command1, command2);
 

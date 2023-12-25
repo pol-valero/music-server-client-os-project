@@ -59,7 +59,7 @@ PlayLists playLists = { NULL, 0 };
 
 Frame receive = { 0, 0, NULL, NULL };
 
-char* buffer = NULL;
+char* buffer = NULL; //TODO: Control this shit bc is, mayba change to local buffer.
 
 /**
  * 
@@ -412,8 +412,6 @@ char* getSongPath (char* name){
     return NULL;
 }
 
-void* downloadSong(void* arg);
-
 void clearDownloadSong(DownloadSong* downloadSong){
     if (downloadSong->songName != NULL){
         cleanPointer(downloadSong->songName);
@@ -426,38 +424,84 @@ void clearDownloadSong(DownloadSong* downloadSong){
     }
 }
 
-void processDownloadSong(char* name, ClientInfo* clientInfo){
-    DownloadSong downloadSong = { NULL, -1, -1, NULL, NULL, NULL };
+void* sendSong(void* arg){
+    DownloadSong* downloadSong = (DownloadSong*)arg;
 
-    downloadSong.songName = strdup(name);
-    downloadSong.path = getSongPath(downloadSong.songName);
-    if(downloadSong.path == NULL){
+    int fd_song = open(downloadSong->path, O_RDONLY);
+    if (fd_song == -1){
+        printEr("Error: Cannot open the song\n");
+        return NULL;
+    }
+    int lenghtFrame = 250 - strlen(FILE_DATA) - snprintf(NULL, 0, "%d", downloadSong->id);
+    char tempBuffer[lenghtFrame];
+    while(read (fd_song, tempBuffer, lenghtFrame) > 0){
+        asprintf(&buffer, "%d&%s", downloadSong->id, tempBuffer);
+        SEM_wait(&downloadSong->ClientInfo->sender);
+        sendFrame(0x04, FILE_DATA, buffer, downloadSong->ClientInfo->fd_client);
+        SEM_signal(&downloadSong->ClientInfo->sender);
+        cleanPointer(buffer);
+    }
+
+    close(fd_song);
+    
+    return NULL;
+}
+
+void processDownloadSong(char* name, ClientInfo* clientInfo){
+    DownloadSong* downloadSong;
+    downloadSong = malloc(sizeof(DownloadSong));
+    downloadSong->songName = NULL;
+    downloadSong->md5sum = NULL;
+    downloadSong->path = NULL;
+    downloadSong->ClientInfo = NULL;
+    downloadSong->id = -1;
+    downloadSong->lenght = -1;
+
+    downloadSong->songName = strdup(name);
+    downloadSong->path = getSongPath(downloadSong->songName);
+    if(downloadSong->path == NULL){
         printEr("Error: The song doesn't exist\n");
+        SEM_wait(&clientInfo->sender);
+        sendFrame(0x04, RESPONSE_KO, "", clientInfo->fd_client);
+        SEM_signal(&clientInfo->sender);
         return;
     }    
-    downloadSong.md5sum = checkSongMD5SUM(downloadSong.path);
-    if(downloadSong.md5sum == NULL){
+    downloadSong->md5sum = checkSongMD5SUM(downloadSong->path);
+    if(downloadSong->md5sum == NULL){
         printEr("Error: The md5sum of the song is NULL\n");
+        SEM_wait(&clientInfo->sender);
+        sendFrame(0x04, RESPONSE_KO, "", clientInfo->fd_client);
+        SEM_signal(&clientInfo->sender);
         return;
     }
-    downloadSong.lenght = getLenghtArchive(downloadSong.path);
-    if(downloadSong.lenght == -1){
+    downloadSong->lenght = getLenghtArchive(downloadSong->path);
+    if(downloadSong->lenght == -1){
         printEr("Error: The lenght of the song is -1\n");
+        SEM_wait(&clientInfo->sender);
+        sendFrame(0x04, RESPONSE_KO, "", clientInfo->fd_client);
+        SEM_signal(&clientInfo->sender);
         return;
     }
-    downloadSong.id = getID();
-    if(downloadSong.id == -1){
+    downloadSong->id = getID();
+    if(downloadSong->id == -1){
         printEr("Error: The id of the song is -1\n");
+        SEM_wait(&clientInfo->sender);
+        sendFrame(0x04, RESPONSE_KO, "", clientInfo->fd_client);
+        SEM_signal(&clientInfo->sender);
         return;
     }
     
-    downloadSong.ClientInfo = clientInfo;
+    downloadSong->ClientInfo = clientInfo;
 
-    asprintf(&buffer, "%s&%ld&%s&%d", downloadSong.songName, downloadSong.lenght, downloadSong.md5sum, downloadSong.id);
+    asprintf(&buffer, "%s&%ld&%s&%d", downloadSong->songName, downloadSong->lenght, downloadSong->md5sum, downloadSong->id);
     SEM_wait(&clientInfo->sender);
-    sendFrame(0x02, NEW_FILE, buffer, clientInfo->fd_client);
+    sendFrame(0x04, NEW_FILE, buffer, clientInfo->fd_client);
     SEM_signal(&clientInfo->sender);
     cleanPointer(buffer);
+    
+    clientInfo->num_petitions++;
+    clientInfo->threadPetitions = realloc(clientInfo->threadPetitions, sizeof(pthread_t) * clientInfo->num_petitions);
+    pthread_create(&clientInfo->threadPetitions[clientInfo->num_petitions - 1], NULL, sendSong, downloadSong);
     
 }
 

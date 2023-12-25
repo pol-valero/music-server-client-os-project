@@ -284,13 +284,14 @@ void disconnectFromPoole () {
 // Function to manage user-input commands.
 void enterCommandMode() {
     char* command;
+    char* SecondCommandWord = NULL;
     int command_case_num;
 
     do {
 
         printx("\n$ ");
         command = readUntilChar(STDIN_FILENO, '\n');
-        command_case_num = commandToCmdCaseNum(command);
+        command_case_num = commandToCmdCaseNum(command, &SecondCommandWord);
         cleanPointer(command);
         
         switch (command_case_num) {
@@ -340,10 +341,46 @@ void enterCommandMode() {
                 
                 break;
             case DOWNLOAD_SONG_CMD:
-                sendFrame(0x02, DOWNLOAD_SONG, "Song2.mp3", fd_socket);
+                sendFrame(0x02, DOWNLOAD_SONG, SecondCommandWord, fd_socket);
+                cleanPointer(SecondCommandWord);
                 cleanFrame(&receive);
                 receive = receiveFrame(fd_socket);
-                printx(receive.data);
+                if (!strcmp(receive.header, RESPONSE_KO)){
+                    printEr("ERROR: Don't exist this song\n");
+                }else{
+                    char* name = strtok(receive.data, "&");
+                    long lenght = atol(strtok(NULL, "&"));
+                    char* md5sum = strtok(NULL, "&");
+                    int id = atoi(strtok(NULL, "&"));
+                    char* path;
+
+                    asprintf(&buffer, "Name: %s\nLenght: %ld\nMD5SUM: %s\nID: %d\n\n", name, lenght, md5sum, id);
+                    printRes(buffer);
+                    cleanPointer(buffer);
+
+                    asprintf(&path, "bowmanProgram/data/Songs/%s", name);
+
+                    int fd = open(path, O_CREAT | O_WRONLY, 0666);
+                    if (fd > 0){
+                        long actualLenght = 0;
+                        while (actualLenght < lenght){
+                            cleanFrame(&receive);
+                            receive = receiveFrame(fd_socket);
+                            int tempid = atoi(strtok(receive.data, "&"));
+                            if (tempid == 0){
+                                printEr("ERROR: Download failed\n");
+                            }
+                            char* info = strtok(NULL, "&");
+                            write(fd, info, strlen(info));
+                            actualLenght += strlen(info);
+                        }
+                        close(fd);
+                    }else{
+                        printEr("ERROR: File already exists\n");
+                    }
+                }
+                
+                
                 break;
             case DOWNLOAD_PLAYLIST_CMD:
                 printRes("Comanda OK\n");

@@ -29,11 +29,24 @@ typedef struct {
     int numSongs;
 }Songs;
 
+typedef struct {
+    int id;
+    long lenght;
+    long actualLenght;
+    char* md5sum;
+    char* path;
+    char* name;
+} DownloadSong;
+typedef struct {
+    DownloadSong* downloadSong;
+    int numDownloadSong;
+} DownloadList;
 /**
  * 
  * Global variables
  * 
  */
+DownloadList downloadList = { NULL, 0 };
 PlayLists playLists = { NULL, 0 };
 
 Songs songs = { NULL, 0};
@@ -43,6 +56,8 @@ PooleInfo poole_info = { NULL, NULL, 0 };
 ClientConfig client_config = { NULL, NULL, NULL, 0};
 
 Frame receive = { 0, 0, NULL, NULL };
+
+fd_set read_fds;
 
 char* buffer = NULL;
 
@@ -100,6 +115,7 @@ int connectToPoole () {
     int fd_socket = startServerConnection(client_config.ip_discovery, client_config.port_discovery);
     sendFrame(0x01, BOWMAN_TO_DISCOVERY, client_config.name, fd_socket);
     
+    
     cleanFrame(&receive);
     receive = receiveFrame(fd_socket);
 
@@ -138,8 +154,7 @@ int connectToPoole () {
         sendFrame(0x07, UNKNOWN, "", fd_socket);
         //TODO: Maybe do a while loop to keep trying to receive a valid frame
     }
-
-    return -1;
+    return fd_socket;
 }
 
 /**
@@ -170,23 +185,32 @@ void updateSongList(const char *SongName) {
 
 void parseReceivedSongs(){
     int result = -1;
-    do{
-        cleanFrame(&receive);
-        receive = receiveFrame(fd_socket);
 
-        char* token;
-        token = strtok(receive.data, "&");
-        result = -1;
-        do{
-            if(!strcmp(token,"0") || !strcmp (token,"1")){
-                result = atoi(token);
-            }else{
-                updateSongList(token);
-            }
-            
-            token = strtok(NULL, "&");
-        }while(result != 0 && result != 1);
-    }while (result != 0);
+    char* token;
+    token = strtok(receive.data, "&");
+    result = -1;
+    do{
+        if(!strcmp(token,"0") || !strcmp (token,"1")){
+            result = atoi(token);
+        }else{
+            updateSongList(token);
+        }
+        
+        token = strtok(NULL, "&");
+    }while(result != 0 && result != 1);
+
+    if (!result){
+        asprintf(&buffer, "There are %d songs available for download:\n", songs.numSongs);
+        printRes(buffer);
+        cleanPointer(buffer);
+
+        for (int i = 0; i < songs.numSongs; i++){
+            asprintf(&buffer, "%d. %s\n",i + 1 ,songs.songs[i]);
+            printRes(buffer);
+            cleanPointer(buffer);
+        }
+        printx("\n$ ");
+    }
 }
 
 /**
@@ -231,37 +255,53 @@ void updateSongOfPlayList(const char *SongName) {
     playLists.playList[playLists.numPlayList - 1].songs[playLists.playList[playLists.numPlayList - 1].numSongs - 1] = strdup(SongName);
 }
 
-void parseReceivedPlayList(int fd){
+void parseReceivedPlayList(){
     char* token;
     int status = 2;
     
-    while (status != 0){
-        cleanFrame(&receive);
-        receive = receiveFrame(fd);
-        token = strtok(receive.data, "&");
+    
+    token = strtok(receive.data, "&");
 
-        while (strcmp(token,"0") && strcmp (token,"1") && strcmp (token,"2")) {
-            if (strchr(token, '#')){
-                char *saveptr;
-                char *songToken = strtok_r(token, "#", &saveptr);
-                updateSongOfPlayList(songToken);
-                char *playlistToken = strtok_r(NULL, "#", &saveptr);
-                if (playlistToken != NULL) {
-                    updatePlaylist(playlistToken);
-                }
-            }else if(status == 2){
-                updatePlaylist(token);
-                status = -1;
-            }else{
-                updateSongOfPlayList(token);
+    while (strcmp(token,"0") && strcmp (token,"1") && strcmp (token,"2")) {
+        if (strchr(token, '#')){
+            char *saveptr;
+            char *songToken = strtok_r(token, "#", &saveptr);
+            updateSongOfPlayList(songToken);
+            char *playlistToken = strtok_r(NULL, "#", &saveptr);
+            if (playlistToken != NULL) {
+                updatePlaylist(playlistToken);
             }
+        }else if(status == 2){
+            updatePlaylist(token);
+            status = -1;
+        }else{
+            updateSongOfPlayList(token);
+        }
 
-            token = strtok(NULL, "&");
-            if (!strcmp(token,"0") || !strcmp (token,"1") || !strcmp (token,"2")){
-                status = atoi(token);
-            }
+        token = strtok(NULL, "&");
+        if (!strcmp(token,"0") || !strcmp (token,"1") || !strcmp (token,"2")){
+            status = atoi(token);
         }
     }
+
+    if (!status){
+        asprintf(&buffer, "There are %d lists available for download:\n",playLists.numPlayList);
+        printRes(buffer);
+        cleanPointer(buffer);
+
+        for (int i = 0; i < playLists.numPlayList ; i++){
+            asprintf(&buffer, "%d. %s\n",i + 1 ,playLists.playList[i].name);
+            printRes(buffer);
+            cleanPointer(buffer);
+            for (int j = 0; j < playLists.playList[i].numSongs; j++){
+                asprintf(&buffer, "\t%c. %s\n",j + 'a' ,playLists.playList[i].songs[j]);
+                printRes(buffer);
+                cleanPointer(buffer);
+            }
+        }
+        printx("\n$ ");
+    }
+    
 }
 
 /**
@@ -277,6 +317,23 @@ void disconnectFromPoole () {
 
 /**
  * 
+ * Functions for download Song
+ * 
+ */
+
+void saveDataSong(DownloadSong* downloadSong, char* data) {
+    int fd = open(downloadSong->path, O_WRONLY | O_CREAT | O_APPEND, 0666);
+    if (fd > 0){
+        write(fd, data, strlen(data));
+        downloadSong->actualLenght += strlen(data);
+        close(fd);
+    }else{
+        printEr("ERROR: File already exists\n");
+    }
+}
+
+/**
+ * 
  * Functions for command mode
  * 
  */
@@ -285,128 +342,169 @@ void disconnectFromPoole () {
 void enterCommandMode() {
     char* command;
     char* SecondCommandWord = NULL;
-    int command_case_num;
+    int command_case_num = -1;
+    int *delete = NULL;
+    int numDelete = 0;
+    
+    FD_ZERO(&read_fds);
+    FD_SET(STDIN_FILENO, &read_fds);
 
+    printx("\n$ ");
     do {
-
-        printx("\n$ ");
-        command = readUntilChar(STDIN_FILENO, '\n');
-        command_case_num = commandToCmdCaseNum(command, &SecondCommandWord);
-        cleanPointer(command);
-        
-        switch (command_case_num) {
-            case CONNECT_CMD:
-                fd_socket = connectToPoole();
-                break;
-            case LOGOUT_CMD:
-                disconnectFromPoole();
-                break;
-            case LIST_SONGS_CMD:
-                sendFrame(0x02, LIST_SONGS, "", fd_socket);
-                
-                cleanSongs();
-                parseReceivedSongs();
-                
-                asprintf(&buffer, "There are %d songs available for download:\n", songs.numSongs);
-                printRes(buffer);
-                cleanPointer(buffer);
-
-                for (int i = 0; i < songs.numSongs; i++){
-                    asprintf(&buffer, "%d. %s\n",i + 1 ,songs.songs[i]);
-                    printRes(buffer);
-                    cleanPointer(buffer);
-                }
-
-                break;
-            case LIST_PLAYLISTS_CMD:
-                sendFrame(0x02, LIST_PLAYLISTS, "", fd_socket);
-
-                cleanPlayLists();
-                parseReceivedPlayList(fd_socket);
-                
-                asprintf(&buffer, "There are %d lists available for download:\n",playLists.numPlayList);
-                printRes(buffer);
-                cleanPointer(buffer);
-
-                for (int i = 0; i < playLists.numPlayList ; i++){
-                    asprintf(&buffer, "%d. %s\n",i + 1 ,playLists.playList[i].name);
-                    printRes(buffer);
-                    cleanPointer(buffer);
-                    for (int j = 0; j < playLists.playList[i].numSongs; j++){
-                        asprintf(&buffer, "\t%c. %s\n",j + 'a' ,playLists.playList[i].songs[j]);
-                        printRes(buffer);
-                        cleanPointer(buffer);
-                    }
-                }
-                
-                break;
-            case DOWNLOAD_SONG_CMD:
-                sendFrame(0x02, DOWNLOAD_SONG, SecondCommandWord, fd_socket);
-                cleanPointer(SecondCommandWord);
-                cleanFrame(&receive);
-                receive = receiveFrame(fd_socket);
-                if (!strcmp(receive.header, RESPONSE_KO)){
-                    printEr("ERROR: Don't exist this song\n");
-                }else{
-                    char* name = strtok(receive.data, "&");
-                    long lenght = atol(strtok(NULL, "&"));
-                    char* md5sum = strtok(NULL, "&");
-                    int id = atoi(strtok(NULL, "&"));
-                    char* path;
-
-                    asprintf(&buffer, "Name: %s\nLenght: %ld\nMD5SUM: %s\nID: %d\n\n", name, lenght, md5sum, id);
-                    printRes(buffer);
-                    cleanPointer(buffer);
-
-                    asprintf(&path, "bowmanProgram/data/Songs/%s", name);
-
-                    int fd = open(path, O_CREAT | O_WRONLY, 0666);
-                    if (fd > 0){
-                        long actualLenght = 0;
-                        while (actualLenght < lenght){
-                            cleanFrame(&receive);
-                            receive = receiveFrame(fd_socket);
-                            int tempid = atoi(strtok(receive.data, "&"));
-                            if (tempid == 0){
-                                printEr("ERROR: Download failed\n");
-                            }
-                            char* info = strtok(NULL, "&");
-                            write(fd, info, strlen(info));
-                            actualLenght += strlen(info);
-                        }
-                        close(fd);
-                    }else{
-                        printEr("ERROR: File already exists\n");
-                    }
-                }
-                
-                
-                break;
-            case DOWNLOAD_PLAYLIST_CMD:
-                printRes("Comanda OK\n");
-                break;
-            case CHECK_DOWNLOADS_CMD:
-                printRes("Comanda OK\n");
-                break;
-            case CLEAR_DOWNLOADS_CMD:
-                printRes("Comanda OK\n");
-                break;
-            case PARTIALLY_CORRECT_CMD:
-                printEr("Comanda KO\n");
-                //Unknown command
-                break;
-            case INVALID_CMD:
-                printEr("Comanda KO\n");
-                //Not valid command
-                break;
-            case NO_CMD:
-                printEr("ERROR: No command entered\n");
-                //No command entered
-                break;
-            default:
-                break;
+        fd_set temp = read_fds;
+        if (select(1024, &temp, NULL, NULL, NULL) == -1) {
+            perror("Error en select");
+            exit(EXIT_FAILURE);
         }
 
+        if (FD_ISSET(STDIN_FILENO, &temp)) {
+            command = readUntilChar(STDIN_FILENO, '\n');
+            command_case_num = commandToCmdCaseNum(command, &SecondCommandWord);
+            cleanPointer(command);
+            
+            switch (command_case_num) {
+                case CONNECT_CMD:
+                    fd_socket = connectToPoole();
+                    FD_SET(fd_socket, &read_fds);
+                    printx("\n$ ");
+                    break;
+                case LOGOUT_CMD:
+                    disconnectFromPoole();
+                    printx("\n$ ");
+                    break;
+                case LIST_SONGS_CMD:
+                    sendFrame(0x02, LIST_SONGS, "", fd_socket);
+                    cleanSongs();
+                    break;
+                case LIST_PLAYLISTS_CMD:
+                    sendFrame(0x02, LIST_PLAYLISTS, "", fd_socket);
+                    cleanPlayLists();
+                    break;
+                case DOWNLOAD_SONG_CMD:
+                    sendFrame(0x02, DOWNLOAD_SONG, SecondCommandWord, fd_socket);
+                    cleanPointer(SecondCommandWord);
+                    printx("\n$ ");
+                    break;
+                case DOWNLOAD_PLAYLIST_CMD:
+                    printRes("Comanda OK\n");
+                    break;
+                case CHECK_DOWNLOADS_CMD:
+                    for(int i = 0; i < downloadList.numDownloadSong; i++){
+                        float percentage = (float)downloadList.downloadSong[i].actualLenght / (float)downloadList.downloadSong[i].lenght;
+
+                        
+                        printRes(downloadList.downloadSong[i].name);
+                        asprintf(&buffer, "\t%.2f%% |", percentage * 100);
+                        printRes(buffer);
+                        cleanPointer(buffer);
+                        for(int j = 0; j < 20; j++){
+                            if (j < percentage * 20){
+                                printRes("=");
+                            }else{
+                                printRes(" ");
+                            }
+                        }
+                        printRes("|\n");
+                    }
+                    break;
+                case CLEAR_DOWNLOADS_CMD:
+                    delete = NULL;
+                    numDelete = 0;
+                    for(int i = 0; i < downloadList.numDownloadSong; i++){
+                        if (downloadList.downloadSong[i].actualLenght == downloadList.downloadSong[i].lenght){
+                            cleanPointer(downloadList.downloadSong[i].path);
+                            cleanPointer(downloadList.downloadSong[i].name);
+                            cleanPointer(downloadList.downloadSong[i].md5sum);
+                            downloadList.downloadSong[i].actualLenght = 0;
+                            downloadList.downloadSong[i].id = 0;
+                            downloadList.downloadSong[i].lenght = 0;
+                            delete = realloc(delete, sizeof(int) * (numDelete + 1));
+                            delete[numDelete] = i;
+                            numDelete++;
+                        }
+                    }
+                    for(int i = 0; i < numDelete; i++){
+                        for(int j = delete[i]; j < downloadList.numDownloadSong - 1; j++){
+                            downloadList.downloadSong[j] = downloadList.downloadSong[j + 1];
+                        }
+                        downloadList.numDownloadSong--;
+                        downloadList.downloadSong = realloc(downloadList.downloadSong, sizeof(DownloadSong) * downloadList.numDownloadSong);
+                    }
+                    break;
+                case PARTIALLY_CORRECT_CMD:
+                    printEr("Comanda KO\n");
+                    //Unknown command
+                    break;
+                case INVALID_CMD:
+                    printEr("Comanda KO\n");
+                    printx("\n$ ");
+                    //Not valid command
+                    break;
+                case NO_CMD:
+                    printEr("ERROR: No command entered\n");
+                    //No command entered
+                    break;
+                default:
+                    break;
+            }
+        }else if (FD_ISSET(fd_socket, &temp)) {
+            cleanFrame(&receive);
+            receive = receiveFrame(fd_socket);
+            if(!strcmp(receive.header, RESPONSE_OK)){
+                if(receive.type == 0x06){
+                    //Response of disconnection from poole
+                }
+            }else if(!strcmp(receive.header, RESPONSE_KO)){
+                if(receive.type == 0x06){
+                    //Response of disconnection from poole
+                }
+            }else if(!strcmp(receive.header, SONGS_RESPONSE)){
+                if (receive.type == 0x02){
+                    //Response of song list.
+                    parseReceivedSongs();
+                }
+            }else if(!strcmp(receive.header, PLAYLISTS_RESPONSE)){
+                if (receive.type == 0x02){
+                    //Response of playlist list.
+                    parseReceivedPlayList();
+                }
+            }else if (!strcmp(receive.header, NEW_FILE)){
+                if (receive.type == 0x04){
+                    //Response of petition for download a song.
+                    DownloadSong downloadSong;
+                    downloadSong.name = strtok(receive.data, "&");
+                    downloadSong.lenght = atol(strtok(NULL, "&"));
+                    downloadSong.md5sum = strtok(NULL, "&");
+                    downloadSong.id = atoi(strtok(NULL, "&"));
+                    asprintf(&downloadSong.path, "bowmanProgram/data/Songs/%s", downloadSong.name);
+                    downloadSong.actualLenght = 0;
+
+                    downloadList.numDownloadSong++;
+                    downloadList.downloadSong = realloc(downloadList.downloadSong, sizeof(DownloadSong) * downloadList.numDownloadSong);
+                    downloadList.downloadSong[downloadList.numDownloadSong - 1] = downloadSong;
+                }
+            }else if (!strcmp(receive.header, FILE_DATA)){
+                if (receive.type == 0x04){
+                    //Data from download song.
+                    int id = atoi(strtok(receive.data, "&"));
+                    char* data = strtok(NULL, "&");
+                    for (int i = 0; i < downloadList.numDownloadSong; i++){
+                        if (downloadList.downloadSong[i].id == id){
+                            saveDataSong(&downloadList.downloadSong[i], data);
+                            break;
+                        }
+                    }
+                }
+            }else if (!strcmp(receive.header, UNKNOWN)){
+                if (receive.type == 0x07){
+                    //Error sending package
+                    printEr("Error: last packet sent was lost\n");
+                }
+            }else{
+                printEr("Error: Error receiving package\n");
+                sendFrame(0x02, UNKNOWN, "", fd_socket);
+            }
+        }
     } while (command_case_num != LOGOUT_CMD);
 
 }
@@ -436,6 +534,8 @@ void terminateExecution () {
     cleanPooleInfo();
     cleanPlayLists();
     cleanSongs();
+
+    FD_ZERO(&read_fds);
 
     signal(SIGINT, SIG_DFL);
     raise(SIGINT);

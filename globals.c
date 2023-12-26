@@ -144,7 +144,6 @@ int startServer(int port, char *ip) {
 
 
 int startServerConnection(char* ip, int port) {
-
     char* buffer; 
 
     struct sockaddr_in socket_addr;
@@ -156,7 +155,6 @@ int startServerConnection(char* ip, int port) {
         printx("Error while creating socket\n");
 
     } else {
-
         memset(&socket_addr, 0, sizeof(socket_addr));
         socket_addr.sin_family = AF_INET;
         socket_addr.sin_port = htons(port);
@@ -167,15 +165,13 @@ int startServerConnection(char* ip, int port) {
             asprintf(&buffer, "Connection error with the server: %s\n", strerror(errno));
             printx(buffer);
             cleanSockets(socket_conn);
-            free(buffer);
+            cleanPointer(buffer);
 
             return -1;
         }
 
     }
-
     return socket_conn;
-
 }
 
 // Read characters until reaching either endChar or endChar2. If endChar2 is found, set endChar2Found to 1.

@@ -259,7 +259,7 @@ void* sendAllPlaylists(void* arg) {
     ClientInfo* clientInfo = (ClientInfo*)arg;
     if (playLists.numPlayList == 0 || playLists.playList[0].numSongs == 0){
         SEM_wait(&clientInfo->sender);
-        sendFrame(0x02, SONGS_RESPONSE, "NO_HAY_CANCIONES&0", clientInfo->fd_client);
+        sendFrame(0x02, PLAYLISTS_RESPONSE, "NO_HAY_CANCIONES&0", clientInfo->fd_client);
         SEM_signal(&clientInfo->sender);
         return NULL;
     }
@@ -269,7 +269,7 @@ void* sendAllPlaylists(void* arg) {
     char* tempBuffer;
     for (int i = 0; i < playLists.numPlayList; i++){
         if (!first){
-            if (strlen(buffer) + strlen(playLists.playList[i].name) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
+            if (strlen(buffer) + strlen(playLists.playList[i].name) + 1 < 256 - 6 - strlen(PLAYLISTS_RESPONSE)) {
                 asprintf(&tempBuffer, "%s#%s", buffer, playLists.playList[i].name);
                 cleanPointer(buffer);
                 buffer = tempBuffer;
@@ -278,7 +278,7 @@ void* sendAllPlaylists(void* arg) {
                 cleanPointer(buffer);
                 buffer = tempBuffer;
                 SEM_wait(&clientInfo->sender);
-                sendFrame(0x02, SONGS_RESPONSE, buffer, clientInfo->fd_client);
+                sendFrame(0x02, PLAYLISTS_RESPONSE, buffer, clientInfo->fd_client);
                 SEM_signal(&clientInfo->sender);
                 cleanPointer(buffer);
                 
@@ -288,7 +288,7 @@ void* sendAllPlaylists(void* arg) {
             first = 0;
         }
         for (int j = 0; j < playLists.playList[i].numSongs; j++){
-            if (strlen(buffer) + strlen(playLists.playList[i].songs[j]) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
+            if (strlen(buffer) + strlen(playLists.playList[i].songs[j]) + 1 < 256 - 6 - strlen(PLAYLISTS_RESPONSE)) {
                 asprintf(&tempBuffer, "%s&%s", buffer, playLists.playList[i].songs[j]);
                 cleanPointer(buffer);
                 buffer = tempBuffer;
@@ -297,7 +297,7 @@ void* sendAllPlaylists(void* arg) {
                 cleanPointer(buffer);
                 buffer = tempBuffer;
                 SEM_wait(&clientInfo->sender);
-                sendFrame(0x02, SONGS_RESPONSE, buffer, clientInfo->fd_client);
+                sendFrame(0x02, PLAYLISTS_RESPONSE, buffer, clientInfo->fd_client);
                 SEM_signal(&clientInfo->sender);
                 cleanPointer(buffer);
 
@@ -311,7 +311,7 @@ void* sendAllPlaylists(void* arg) {
     cleanPointer(buffer);
     buffer = tempBuffer;
     SEM_wait(&clientInfo->sender);
-    sendFrame(0x02, SONGS_RESPONSE, buffer, clientInfo->fd_client);
+    sendFrame(0x02, PLAYLISTS_RESPONSE, buffer, clientInfo->fd_client);
     SEM_signal(&clientInfo->sender);
     cleanPointer(buffer);
 
@@ -432,7 +432,7 @@ void* sendSong(void* arg){
         printEr("Error: Cannot open the song\n");
         return NULL;
     }
-    int lenghtFrame = 250 - strlen(FILE_DATA) - snprintf(NULL, 0, "%d", downloadSong->id);
+    int lenghtFrame = 250 - strlen(FILE_DATA) - snprintf(NULL, 0, "%d", downloadSong->id); //TODO: solve this, i thought the type is 4 bytes and it's not true
     char tempBuffer[lenghtFrame];
     while(read (fd_song, tempBuffer, lenghtFrame) > 0){
         asprintf(&buffer, "%d&%s", downloadSong->id, tempBuffer);

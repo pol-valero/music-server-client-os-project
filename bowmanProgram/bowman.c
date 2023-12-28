@@ -55,7 +55,7 @@ PooleInfo poole_info = { NULL, NULL, 0 };
 
 ClientConfig client_config = { NULL, NULL, NULL, 0};
 
-Frame receive = { 0, 0, NULL, NULL };
+Frame receive = {0, 0, NULL, NULL};
 
 fd_set read_fds;
 
@@ -321,16 +321,86 @@ void disconnectFromPoole () {
  * 
  */
 
+char* checkSongMD5SUM (char* path){
+    char *openssl_command[] = {"md5sum", path, NULL};
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        perror("pipe");
+        return NULL;
+    }
+
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        perror("fork");
+         return NULL;
+    }
+
+    if (pid == 0) {  // Proceso hijo
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO); 
+
+        execvp("md5sum", openssl_command);
+
+        perror("execvp");
+        return NULL;
+    } else {  // Proceso padre
+        close(pipefd[1]);
+
+        int status;
+        waitpid(pid, &status, 0); 
+
+        if (WIFEXITED(status)) {
+            // Read the output of the md5sum command from the pipe
+            buffer = malloc (sizeof(char) * 1024);
+            
+            ssize_t bytesRead;
+            
+            bytesRead = read(pipefd[0], buffer, 1024);
+            buffer[bytesRead] = '\0';
+            
+            char *token = strtok(buffer, " ");
+            
+            close(pipefd[0]);
+
+            return token;
+        } else {
+            printEr("El proceso hijo terminó con error.\n");
+            close(pipefd[0]);
+        }
+
+        close(pipefd[0]);
+    }
+
+    cleanPointer(path);
+
+    return NULL;
+}
+
 void saveDataSong(DownloadSong* downloadSong, char* data) {
     int fd = open(downloadSong->path, O_WRONLY | O_CREAT | O_APPEND, 0666);
+    
     if (fd > 0){
         write(fd, data, strlen(data));
         downloadSong->actualLenght += strlen(data);
         close(fd);
+        if (downloadSong->actualLenght == downloadSong->lenght){
+            char* md5sum = checkSongMD5SUM(downloadSong->path);
+            if (md5sum != NULL){
+                if (strcmp(md5sum, downloadSong->md5sum)){
+                    printEr("ERROR: Song downloaded with errors\n");
+                }
+                cleanPointer(md5sum);
+            }else{
+                printEr("ERROR: Song downloaded with errors\n");
+            }
+        }
     }else{
         printEr("ERROR: File already exists\n");
     }
 }
+
 
 /**
  * 
@@ -389,10 +459,14 @@ void enterCommandMode() {
                     printRes("Comanda OK\n");
                     break;
                 case CHECK_DOWNLOADS_CMD:
+
                     for(int i = 0; i < downloadList.numDownloadSong; i++){
                         float percentage = (float)downloadList.downloadSong[i].actualLenght / (float)downloadList.downloadSong[i].lenght;
-
                         
+                        asprintf(&buffer, "%ld/%ld\n ", downloadList.downloadSong[i].actualLenght, downloadList.downloadSong[i].lenght);
+                        printRes(buffer);
+                        cleanPointer(buffer);
+
                         printRes(downloadList.downloadSong[i].name);
                         asprintf(&buffer, "\t%.2f%% |", percentage * 100);
                         printRes(buffer);
@@ -406,6 +480,7 @@ void enterCommandMode() {
                         }
                         printRes("|\n");
                     }
+                    printx("\n$ ");
                     break;
                 case CLEAR_DOWNLOADS_CMD:
                     delete = NULL;
@@ -430,6 +505,7 @@ void enterCommandMode() {
                         downloadList.numDownloadSong--;
                         downloadList.downloadSong = realloc(downloadList.downloadSong, sizeof(DownloadSong) * downloadList.numDownloadSong);
                     }
+                    printx("\n$ ");
                     break;
                 case PARTIALLY_CORRECT_CMD:
                     printEr("Comanda KO\n");
@@ -472,9 +548,9 @@ void enterCommandMode() {
                 if (receive.type == 0x04){
                     //Response of petition for download a song.
                     DownloadSong downloadSong;
-                    downloadSong.name = strtok(receive.data, "&");
+                    downloadSong.name = strdup(strtok(receive.data, "&"));
                     downloadSong.lenght = atol(strtok(NULL, "&"));
-                    downloadSong.md5sum = strtok(NULL, "&");
+                    downloadSong.md5sum = strdup(strtok(NULL, "&"));
                     downloadSong.id = atoi(strtok(NULL, "&"));
                     asprintf(&downloadSong.path, "bowmanProgram/data/Songs/%s", downloadSong.name);
                     downloadSong.actualLenght = 0;
@@ -482,17 +558,28 @@ void enterCommandMode() {
                     downloadList.numDownloadSong++;
                     downloadList.downloadSong = realloc(downloadList.downloadSong, sizeof(DownloadSong) * downloadList.numDownloadSong);
                     downloadList.downloadSong[downloadList.numDownloadSong - 1] = downloadSong;
+
+                    if (access(downloadSong.path, F_OK) != -1) {
+                        if (remove(downloadSong.path) != 0) {
+                            perror("Error al eliminar el archivo");
+                        }
+                    }
                 }
             }else if (!strcmp(receive.header, FILE_DATA)){
                 if (receive.type == 0x04){
                     //Data from download song.
                     int id = atoi(strtok(receive.data, "&"));
-                    char* data = strtok(NULL, "&");
-                    for (int i = 0; i < downloadList.numDownloadSong; i++){
-                        if (downloadList.downloadSong[i].id == id){
-                            saveDataSong(&downloadList.downloadSong[i], data);
-                            break;
+                    char *data = strdup(strtok(NULL, "&"));
+                    if (data != NULL){
+                        for (int i = 0; i < downloadList.numDownloadSong; i++){
+                            if (downloadList.downloadSong[i].id == id){
+                                saveDataSong(&downloadList.downloadSong[i], data);
+                                cleanPointer(data);
+                                break;
+                            }
                         }
+                    }else{
+                        printEr("Error: yep we know the error :C\n");
                     }
                 }
             }else if (!strcmp(receive.header, UNKNOWN)){
@@ -506,7 +593,6 @@ void enterCommandMode() {
             }
         }
     } while (command_case_num != LOGOUT_CMD);
-
 }
 
 /**

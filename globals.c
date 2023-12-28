@@ -11,8 +11,8 @@ void sendFrame (uint8_t type, char* header, char* data, int fd_socket) {
 }
 
 Frame receiveFrame (int fd_socket) {
-
     char* buffer = malloc(sizeof(char) * 256);
+
     read(fd_socket, buffer, 256);
     Frame frame = deserializeFrame(buffer);
     free(buffer);
@@ -27,7 +27,7 @@ Frame createFrame(uint8_t type, char* header, char* data) {
     uint16_t header_length = strlen(header) + 1;    //We add 1 to the length to include the '\0' character
     uint16_t data_length = strlen(data) + 1;
     uint16_t data_field_length = 256 - 3 - header_length;
-
+    
     frame.type = type;
     frame.header_length = header_length;
 
@@ -47,7 +47,7 @@ Frame createFrame(uint8_t type, char* header, char* data) {
         memset(allocatedData + data_length, '\0', data_field_length - data_length); //We add '\0' as a padding to the data field.
         //allocatedData + data_length = starting position of the padding
         //data_field_length - data_length = number of '\0' padding to add
-
+        
         frame.data = allocatedData;
     }
 

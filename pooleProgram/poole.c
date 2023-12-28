@@ -57,7 +57,7 @@ ServerConfig server_config = { NULL, NULL, NULL, 0, NULL, 0 };
 
 PlayLists playLists = { NULL, 0 };  
 
-Frame receive = { 0, 0, NULL, NULL };
+Frame receive = {0, 0, NULL, NULL };
 
 char* buffer = NULL; //TODO: Control this shit bc is, mayba change to local buffer.
 
@@ -324,8 +324,6 @@ void* sendAllPlaylists(void* arg) {
  * 
  */
 
-
-
 char* checkSongMD5SUM (char* path){
     char *openssl_command[] = {"md5sum", path, NULL};
 
@@ -432,10 +430,13 @@ void* sendSong(void* arg){
         printEr("Error: Cannot open the song\n");
         return NULL;
     }
-    int lenghtFrame = 250 - strlen(FILE_DATA) - snprintf(NULL, 0, "%d", downloadSong->id); //TODO: solve this, i thought the type is 4 bytes and it's not true
+
+    int lenghtFrame = 256 - 50; //TODO: solve this, i thought the type is 4 bytes and it's not true
     char tempBuffer[lenghtFrame];
-    while(read (fd_song, tempBuffer, lenghtFrame) > 0){
-        asprintf(&buffer, "%d&%s", downloadSong->id, tempBuffer);
+    int bytesRead;
+    
+    while((bytesRead = read (fd_song, tempBuffer, lenghtFrame)) > 0){
+        asprintf(&buffer, "%d&%.*s", downloadSong->id, bytesRead, tempBuffer);
         SEM_wait(&downloadSong->ClientInfo->sender);
         sendFrame(0x04, FILE_DATA, buffer, downloadSong->ClientInfo->fd_client);
         SEM_signal(&downloadSong->ClientInfo->sender);
@@ -491,7 +492,7 @@ void processDownloadSong(char* name, ClientInfo* clientInfo){
         return;
     }
     
-    downloadSong->ClientInfo = clientInfo;
+    downloadSong->ClientInfo = clientInfo;    
 
     asprintf(&buffer, "%s&%ld&%s&%d", downloadSong->songName, downloadSong->lenght, downloadSong->md5sum, downloadSong->id);
     SEM_wait(&clientInfo->sender);
@@ -572,10 +573,11 @@ void* runServer(void* arg){
             asprintf(&buffer, "New request - %s requires disconnection\n", receive.data);
             printQue(buffer);
             cleanPointer(buffer);
-        }
-        else{
+        }else{
             printEr("Error: Error receiving package\n");
+            SEM_wait(&clientInfo->sender);
             sendFrame(0x02, UNKNOWN, "", clientInfo->fd_client);
+            SEM_signal(&clientInfo->sender);
         }
     } while (strcmp(receive.header, EXIT));
 
@@ -726,7 +728,7 @@ int main (int argc, char** argv) {
 
     signal(SIGINT, terminateExecution);
     signal(SIGTERM, terminateExecution);
-
+    
     //This is for the semaphore which delete a client from the list of client
     SEM_constructor_with_name(&clearClients, ftok("clearSender", 7));
     SEM_init(&clearClients, 1);
@@ -767,6 +769,7 @@ int main (int argc, char** argv) {
     if (fd_socket != -1 && result){
         printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");
         printx("\nWaiting for connections...\n\n");
+
         while (1){
             addClient();
         }

@@ -374,7 +374,7 @@ char* checkSongMD5SUM (char* path){
             char *token = strdup(strtok(buffer, " "));
             
             close(pipefd[0]);
-
+            cleanPointer(buffer);
             return token;
         } else {
             printEr("El proceso hijo terminó con error.\n");
@@ -456,9 +456,11 @@ void* sendSong(void* arg){
         SEM_signal(&downloadSong->ClientInfo->sender);
         cleanPointer(buffer);
     }
-    
 
     close(fd_song);
+    cleanPointer(downloadSong->songName);
+    cleanPointer(downloadSong->md5sum);
+    cleanPointer(downloadSong->path);
     
     return NULL;
 }
@@ -802,6 +804,7 @@ void createMonolit (){
             SEM_wait(&sem);
             updateStats(buffer);
             SEM_signal(&sem);
+            cleanPointer(buffer);
         }
     }
 }
@@ -830,7 +833,6 @@ void terminateExecution () {
     }
 
     pthread_exit(NULL);
-
 
     signal(SIGINT, SIG_DFL);
     raise(SIGINT);

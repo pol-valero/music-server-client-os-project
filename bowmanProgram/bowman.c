@@ -660,6 +660,7 @@ void enterCommandMode() {
                     break;
                 case PARTIALLY_CORRECT_CMD:
                     printEr("Comanda KO\n");
+                    printx("\n$ ");
                     //Unknown command
                     break;
                 case INVALID_CMD:
@@ -669,6 +670,7 @@ void enterCommandMode() {
                     break;
                 case NO_CMD:
                     printEr("ERROR: No command entered\n");
+                    printx("\n$ ");
                     //No command entered
                     break;
                 default:

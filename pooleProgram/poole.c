@@ -5,6 +5,9 @@
 #include <dirent.h>
 #include "../semaphore_2v.h"
 
+#define MAX_NAME_LENGTH 50
+#define FILENAME "stats.txt"
+
 /**
  * 
  * Structs
@@ -44,6 +47,8 @@ typedef struct {
     char* path;
 } DownloadSong;
 
+
+
 /**
  * 
  * Global variables
@@ -59,6 +64,9 @@ PlayLists playLists = { NULL, 0 };
 
 Frame receive = {0, 0, NULL, NULL };
 
+int close_monolit = 0;
+
+int pipe_fd[2];
 /**
  * 
  * Sockets file descriptors
@@ -68,6 +76,7 @@ Frame receive = {0, 0, NULL, NULL };
 int fd_config = -1;
 
 int fd_socket = -1;
+
 
 /**
  * 
@@ -463,11 +472,15 @@ void processDownloadSong(char* name, ClientInfo* clientInfo){
 
     if (strchr(name, '/') != NULL){
         strtok(name, "/");
-        downloadSong->path = strdup(getSongPath(strtok(NULL, "/")));
+        char* temp_name = strtok(NULL, "/");
+        downloadSong->path = strdup(getSongPath(temp_name));
+        write(pipe_fd[1], temp_name, strlen(temp_name));
+        write(pipe_fd[1], "&", 1);
     }else{
         downloadSong->path = strdup(getSongPath(name));
+        write(pipe_fd[1], name, strlen(name));
+        write(pipe_fd[1], "&", 1);  
     }
-
     
     if(downloadSong->path == NULL){
         printEr("Error: The song doesn't exist\n");
@@ -509,6 +522,7 @@ void processDownloadSong(char* name, ClientInfo* clientInfo){
     SEM_wait(&clientInfo->sender);
     sendFrame(0x04, NEW_FILE, buffer, clientInfo->fd_client);
     SEM_signal(&clientInfo->sender);
+
     cleanPointer(buffer);
 
     clientInfo->num_petitions++;
@@ -727,8 +741,79 @@ void cleanClientInfo(){
     }
 }
 
+//function that open a txt and search a name and update the number of petitions,if doesn't exist the name, add it. the file could be empty
+void updateStats(const char *name){
+    int fd_stats = open(FILENAME, O_RDWR | O_CREAT, 0666);
+    if (fd_stats == -1){
+        printEr("Error: Cannot open the file\n");
+        return;
+    }
+    char* buffer = NULL;
+    while ((buffer = readUntilChar(fd_stats, '\n')) != NULL && strlen(buffer) > 0){
+        char* temp_name = strtok(buffer, "&");
+        if (!strcmp(temp_name, name)){
+            char* temp_petitions = strtok(NULL, "&");
+            int petitions = atoi(temp_petitions);
+            petitions++;
+            lseek(fd_stats, -strlen(temp_petitions) - 1, SEEK_CUR);
+            char* buffer;
+            asprintf(&buffer, "%d", petitions);
+            write(fd_stats, buffer, strlen(buffer));
+            cleanPointer(buffer);
+            return;
+        }
+    }
+    lseek(fd_stats, 0, SEEK_END);
+    asprintf(&buffer, "%s&1\n", name);
+    write(fd_stats, buffer, strlen(buffer));
+    cleanPointer(buffer);
+    close(fd_stats);
+}
+
+void createMonolit (){
+    pid_t pid;
+
+    // Crear el pipe
+    if (pipe(pipe_fd) == -1) {
+        perror("Error al crear el pipe");
+        exit(EXIT_FAILURE);
+    }
+
+    // Crear un nuevo proceso
+    pid = fork();
+
+    if (pid == -1) {
+        perror("Error al crear el proceso");
+        exit(EXIT_FAILURE);
+    }
+
+    if (pid == 0) { 
+        semaphore sem;
+
+        // Crear o abrir el semáforo
+        int semResult = SEM_constructor_with_name(&sem, ftok("poole", 'S'));
+        if (semResult < 0) {
+            perror("Error al abrir el semáforo");
+            exit(EXIT_FAILURE);
+        }
+
+        while (close_monolit == 0){
+            char* buffer = readUntilChar(pipe_fd[0], '&');
+            SEM_wait(&sem);
+            updateStats(buffer);
+            SEM_signal(&sem);
+        }
+    }
+}
+
 // Handle unexpected termination scenarios.
 void terminateExecution () {
+    
+    close(pipe_fd[0]); 
+    close(pipe_fd[1]); 
+
+    close_monolit = 1;
+
     //Free the memory allocated for the server_config
     cleanServerConfig(&server_config);
     cleanFrame(&receive);
@@ -746,13 +831,13 @@ void terminateExecution () {
 
     pthread_exit(NULL);
 
+
     signal(SIGINT, SIG_DFL);
     raise(SIGINT);
 }
 
 //main function :p
 int main (int argc, char** argv) {
-
     signal(SIGINT, terminateExecution);
     signal(SIGTERM, terminateExecution);
 
@@ -794,6 +879,8 @@ int main (int argc, char** argv) {
     }
 
     loadSongs(current_dir);
+
+    createMonolit();
 
     if (fd_socket != -1 && result){
         printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");

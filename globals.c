@@ -1,5 +1,50 @@
 #include "globals.h"
 
+void sendFrameSong (uint8_t type, char* header, char* data, int fd_socket, int data_length) {
+
+    Frame frame = createFrameSong(type, header, data, data_length);
+    
+    char* buffer = serializeFrame(frame);
+    write(fd_socket, buffer, 256);
+    
+    free(buffer);
+    free(frame.header);
+    free(frame.data);
+}
+
+
+Frame createFrameSong(uint8_t type, char* header, char* data, int data_length) {
+    
+    Frame frame;
+
+    uint16_t header_length = strlen(header) + 1;    //We add 1 to the length to include the '\0' character
+    uint16_t data_field_length = 256 - 3 - header_length;
+    
+    frame.type = type;
+    frame.header_length = header_length;
+
+    frame.header = malloc(sizeof(char) * header_length);
+    strcpy(frame.header, header);
+
+    if (data_length == data_field_length) {
+        frame.data = malloc(sizeof(char) * data_field_length);
+        memcpy(frame.data, data, data_length);  //If the data has exactly the size of the data field, we can just point to it.
+    } else {
+        char* allocatedData;
+
+        allocatedData = malloc(sizeof(char) * data_field_length); //If the data is smaller than the data field, we need request more memory and add padding.
+
+        memcpy(allocatedData, data, data_length); //We copy the data to the allocated memory
+        memset(allocatedData + data_length, '\0', data_field_length - data_length); //We add '\0' as a padding to the data field.
+        //allocatedData + data_length = starting position of the padding
+        //data_field_length - data_length = number of '\0' padding to add
+        
+        frame.data = allocatedData;
+    }
+
+    return frame;
+}
+
 void sendFrame (uint8_t type, char* header, char* data, int fd_socket) {
 
     Frame frame = createFrame(type, header, data);

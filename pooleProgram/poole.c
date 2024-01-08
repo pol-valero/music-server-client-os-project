@@ -59,8 +59,6 @@ PlayLists playLists = { NULL, 0 };
 
 Frame receive = {0, 0, NULL, NULL };
 
-char* buffer = NULL; //TODO: Control this shit bc is, mayba change to local buffer.
-
 /**
  * 
  * Sockets file descriptors
@@ -210,7 +208,7 @@ void* sendAllSongs(void* arg) {
         return NULL;
     }
     int first = 1;
-
+    char* buffer;
     char *tempBuffer;
     asprintf(&buffer, "test"); //TODO: memory leak
     for (int i = 0; i < playLists.numPlayList; i++){
@@ -256,6 +254,7 @@ void* sendAllSongs(void* arg) {
  */
 
 void* sendAllPlaylists(void* arg) {
+    char* buffer;
     ClientInfo* clientInfo = (ClientInfo*)arg;
     if (playLists.numPlayList == 0 || playLists.playList[0].numSongs == 0){
         SEM_wait(&clientInfo->sender);
@@ -326,7 +325,7 @@ void* sendAllPlaylists(void* arg) {
 
 char* checkSongMD5SUM (char* path){
     char *openssl_command[] = {"md5sum", path, NULL};
-
+    char* buffer;
     int pipefd[2];
     if (pipe(pipefd) == -1) {
         perror("pipe");
@@ -363,7 +362,7 @@ char* checkSongMD5SUM (char* path){
             bytesRead = read(pipefd[0], buffer, 1024);
             buffer[bytesRead] = '\0';
             
-            char *token = strtok(buffer, " ");
+            char *token = strdup(strtok(buffer, " "));
             
             close(pipefd[0]);
 
@@ -383,7 +382,6 @@ char* checkSongMD5SUM (char* path){
 
 long getLenghtArchive(const char *path) {
     struct stat statArchivo;
-
     if (stat(path, &statArchivo) == -1) {
         perror("Error al obtener información del archivo");
         return -1;
@@ -395,10 +393,11 @@ long getLenghtArchive(const char *path) {
 int getID() {
     srand((unsigned int)time(NULL));
 
-    return rand();
+    return rand()%1000;
 }
 
 char* getSongPath (char* name){
+    char* buffer;
     for (int i = 0; i < playLists.numPlayList; i++)    {
         for (int j = 0; j < playLists.playList[i].numSongs; j++){
             if (!strcmp(name, playLists.playList[i].songs[j])){
@@ -426,22 +425,31 @@ void* sendSong(void* arg){
     DownloadSong* downloadSong = (DownloadSong*)arg;
 
     int fd_song = open(downloadSong->path, O_RDONLY);
+
     if (fd_song == -1){
         printEr("Error: Cannot open the song\n");
         return NULL;
     }
 
-    int lenghtFrame = 256 - 50; //TODO: solve this, i thought the type is 4 bytes and it's not true
-    char tempBuffer[lenghtFrame];
+    int lengthFrame = 256 - 3 /* Type and header length */- strlen(FILE_DATA) - 1 /*\0*/ - snprintf(NULL, 0, "%d", downloadSong->id) - 1 /*&*/;
+    char tempBuffer[lengthFrame];
     int bytesRead;
+
+    char* buffer;
     
-    while((bytesRead = read (fd_song, tempBuffer, lenghtFrame)) > 0){
-        asprintf(&buffer, "%d&%.*s", downloadSong->id, bytesRead, tempBuffer);
+    while((bytesRead = read (fd_song, tempBuffer, lengthFrame)) > 0){
+        int bufferSize = snprintf(NULL, 0, "%d", downloadSong->id) + 1 + bytesRead;
+        buffer = malloc(sizeof(char) * bufferSize);
+        sprintf(buffer, "%d", downloadSong->id);
+        buffer[snprintf(NULL, 0, "%d", downloadSong->id)] = '&';
+        memcpy(buffer + snprintf(NULL, 0, "%d", downloadSong->id) + 1, tempBuffer, bytesRead);
+        usleep(700);
         SEM_wait(&downloadSong->ClientInfo->sender);
-        sendFrame(0x04, FILE_DATA, buffer, downloadSong->ClientInfo->fd_client);
+        sendFrameSong(0x04, FILE_DATA, buffer, downloadSong->ClientInfo->fd_client, bufferSize);
         SEM_signal(&downloadSong->ClientInfo->sender);
         cleanPointer(buffer);
     }
+    
 
     close(fd_song);
     
@@ -450,23 +458,26 @@ void* sendSong(void* arg){
 
 void processDownloadSong(char* name, ClientInfo* clientInfo){
     DownloadSong* downloadSong;
+    char* buffer;
     downloadSong = malloc(sizeof(DownloadSong));
-    downloadSong->songName = NULL;
-    downloadSong->md5sum = NULL;
-    downloadSong->path = NULL;
-    downloadSong->ClientInfo = NULL;
-    downloadSong->id = -1;
-    downloadSong->lenght = -1;
-
+    
     downloadSong->songName = strdup(name);
-    downloadSong->path = getSongPath(downloadSong->songName);
+
+    if (strchr(name, '/') != NULL){
+        strtok(name, "/");
+        downloadSong->path = strdup(getSongPath(strtok(NULL, "/")));
+    }else{
+        downloadSong->path = strdup(getSongPath(name));
+    }
+
+    
     if(downloadSong->path == NULL){
         printEr("Error: The song doesn't exist\n");
         SEM_wait(&clientInfo->sender);
         sendFrame(0x04, RESPONSE_KO, "", clientInfo->fd_client);
         SEM_signal(&clientInfo->sender);
         return;
-    }    
+    }
     downloadSong->md5sum = checkSongMD5SUM(downloadSong->path);
     if(downloadSong->md5sum == NULL){
         printEr("Error: The md5sum of the song is NULL\n");
@@ -503,7 +514,6 @@ void processDownloadSong(char* name, ClientInfo* clientInfo){
     clientInfo->num_petitions++;
     clientInfo->threadPetitions = realloc(clientInfo->threadPetitions, sizeof(pthread_t) * clientInfo->num_petitions);
     pthread_create(&clientInfo->threadPetitions[clientInfo->num_petitions - 1], NULL, sendSong, downloadSong);
-    
 }
 
 /**
@@ -511,7 +521,21 @@ void processDownloadSong(char* name, ClientInfo* clientInfo){
  * Functions for download a list of songs 
  * 
  */
-void* downloadListSongs(void* arg);
+void downloadListSongs(char* name, ClientInfo* clientInfo){
+    char* buffer;
+    for (int i = 0; i < playLists.numPlayList; i++){
+        if (strcmp(name, playLists.playList[i].name) == 0){
+            for (int j = 0; j < playLists.playList[i].numSongs; j++){
+                asprintf(&buffer, "%s/%s", name,playLists.playList[i].songs[j]);
+                processDownloadSong(buffer, clientInfo);
+            }
+            return;
+        }
+    }
+    SEM_wait(&clientInfo->sender);
+    sendFrame(0x04, RESPONSE_KO, "", clientInfo->fd_client);
+    SEM_signal(&clientInfo->sender);
+}
 
 /**
  * 
@@ -522,6 +546,7 @@ void* downloadListSongs(void* arg);
 void* runServer(void* arg){
     ClientInfo* clientInfo = (ClientInfo*)arg;
     pthread_cleanup_push(disconect, clientInfo);
+    char* buffer;
     do{
         cleanFrame(&receive);
         receive = receiveFrame(clientInfo->fd_client);
@@ -564,6 +589,8 @@ void* runServer(void* arg){
             printQue(buffer);
             cleanPointer(buffer);
 
+            downloadListSongs(receive.data, clientInfo);
+
             asprintf(&buffer,"Sending %s to %s.\n\n", receive.data,clientInfo->name);
             printRes(buffer);
             cleanPointer(buffer);
@@ -584,7 +611,7 @@ void* runServer(void* arg){
     
 
     pthread_cleanup_pop(1);
-
+    char* buffer;
     asprintf(&buffer, "User -%s- disconnected\n\n", receive.data);
     printRes(buffer);
     cleanPointer(buffer);
@@ -601,7 +628,7 @@ void* runServer(void* arg){
 void configureClient(int fd_temp){
     SEM_wait(&clearClients);
     int index = clients.numClients;
-    
+    char* buffer;
     //TODO: manage the threads from the client who had disconected already
     clients.clientInfo = realloc(clients.clientInfo, sizeof(ClientInfo) * (index + 1));
     
@@ -659,7 +686,7 @@ void addClient(){
 
 int doDiscoveryHandshake() {
     int fd_socket = startServerConnection(server_config.ip_discovery, server_config.port_discovery);
-
+    char* buffer;
     if (fd_socket < 0) {
         printEr("ERROR: Cannot connect to the discovery server\n");
         return 0;

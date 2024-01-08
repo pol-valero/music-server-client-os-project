@@ -39,14 +39,23 @@ typedef struct {
 } DownloadSong;
 typedef struct {
     DownloadSong* downloadSong;
+    char* name;
     int numDownloadSong;
 } DownloadList;
+typedef struct {
+    DownloadList* downloadList;
+    int numDownloadList;
+} DownloadLists;
+
 /**
  * 
  * Global variables
  * 
  */
-DownloadList downloadList = { NULL, 0 };
+DownloadLists downloadPlayList = {NULL, 0};
+
+DownloadList downloadSongs = {NULL, NULL, 0};
+
 PlayLists playLists = { NULL, 0 };
 
 Songs songs = { NULL, 0};
@@ -58,8 +67,6 @@ ClientConfig client_config = { NULL, NULL, NULL, 0};
 Frame receive = {0, 0, NULL, NULL};
 
 fd_set read_fds;
-
-char* buffer = NULL;
 
 /**
  * 
@@ -77,6 +84,8 @@ int fd_socket = -1;
  */
 
 void printConnectionInitMsg() {
+    char* buffer;
+
     asprintf(&buffer, "%s connected to HAL 9000 system, welcome music lover!\n", client_config.name);
     printx(buffer);
     cleanPointer(buffer);
@@ -100,6 +109,7 @@ void cleanPooleInfo() {
 PooleInfo frameToPooleInfo () {
 
     int endCharPos;
+    char* buffer;
     
     poole_info.name = readStringUntilChar(0, receive.data, '&', &endCharPos);
     poole_info.ip = readStringUntilChar(endCharPos + 1, receive.data, '&', &endCharPos);
@@ -185,6 +195,7 @@ void updateSongList(const char *SongName) {
 
 void parseReceivedSongs(){
     int result = -1;
+    char* buffer;
 
     char* token;
     token = strtok(receive.data, "&");
@@ -220,9 +231,6 @@ void parseReceivedSongs(){
  */
 
 void cleanPlayLists() {
-    if(playLists.playList == 0) {
-        return;
-    }
     for (int i = 0; i < playLists.numPlayList; i++) {
         cleanPointer(playLists.playList[i].name);
         for (int j = 0; j < playLists.playList[i].numSongs; j++) {
@@ -258,7 +266,7 @@ void updateSongOfPlayList(const char *SongName) {
 void parseReceivedPlayList(){
     char* token;
     int status = 2;
-    
+    char* buffer;
     
     token = strtok(receive.data, "&");
 
@@ -323,6 +331,7 @@ void disconnectFromPoole () {
 
 char* checkSongMD5SUM (char* path){
     char *openssl_command[] = {"md5sum", path, NULL};
+    char* buffer;
 
     int pipefd[2];
     if (pipe(pipefd) == -1) {
@@ -378,29 +387,105 @@ char* checkSongMD5SUM (char* path){
     return NULL;
 }
 
-void saveDataSong(DownloadSong* downloadSong, char* data) {
-    int fd = open(downloadSong->path, O_WRONLY | O_CREAT | O_APPEND, 0666);
+void saveDataSong(DownloadSong* downloadSong, char* data, int dataLength) {
+    int fd = open(downloadSong->path, O_WRONLY | O_CREAT | O_APPEND, 0777);
     
     if (fd > 0){
-        write(fd, data, strlen(data));
-        downloadSong->actualLenght += strlen(data);
-        close(fd);
-        if (downloadSong->actualLenght == downloadSong->lenght){
+        int bytesLeft = downloadSong->lenght - downloadSong->actualLenght;
+        if (dataLength > bytesLeft){
+            write(fd, data, bytesLeft);
+            downloadSong->actualLenght += bytesLeft;
+
             char* md5sum = checkSongMD5SUM(downloadSong->path);
             if (md5sum != NULL){
                 if (strcmp(md5sum, downloadSong->md5sum)){
                     printEr("ERROR: Song downloaded with errors\n");
+                    //TODO: Send frame.
                 }
                 cleanPointer(md5sum);
             }else{
                 printEr("ERROR: Song downloaded with errors\n");
             }
+            
+        }else{
+            write(fd, data, dataLength);
+            downloadSong->actualLenght += dataLength;
         }
+        close(fd);
     }else{
         printEr("ERROR: File already exists\n");
     }
+    
 }
 
+void printDownloadSong(DownloadSong downloadSong){
+    char* buffer;
+    float percentage = (float)downloadSong.actualLenght / (float)downloadSong.lenght;
+
+    printRes(downloadSong.name);
+    asprintf(&buffer, "\t%.2f%% |", percentage * 100);
+    printRes(buffer);
+    cleanPointer(buffer);
+
+    for(int j = 0; j < 20; j++){
+        if (j < percentage * 20){
+            printRes("=");
+        }else{
+            printRes(" ");
+        }
+    }
+    printRes("|\n");
+}
+
+void showDownloads(){
+    for(int i = 0; i < downloadSongs.numDownloadSong; i++){
+        printDownloadSong(downloadSongs.downloadSong[i]);
+    }
+    for (int i = 0; i < downloadPlayList.numDownloadList; i++){
+        for (int j = 0; j < downloadPlayList.downloadList[i].numDownloadSong; j++){
+            printDownloadSong(downloadPlayList.downloadList[i].downloadSong[j]);
+        }
+    }
+    
+    printx("\n$ ");
+}
+
+void clearDownloads(){
+
+    for(int i = 0; i < downloadSongs.numDownloadSong; i++){
+        if (downloadSongs.downloadSong[i].actualLenght == downloadSongs.downloadSong[i].lenght){
+            cleanPointer(downloadSongs.downloadSong[i].path);
+            cleanPointer(downloadSongs.downloadSong[i].name);
+            cleanPointer(downloadSongs.downloadSong[i].md5sum);
+            
+            for (int j = i; j < downloadSongs.numDownloadSong - 1; j++){
+                downloadSongs.downloadSong[j] = downloadSongs.downloadSong[j + 1];
+            }
+
+            downloadSongs.numDownloadSong--;
+            downloadSongs.downloadSong = realloc(downloadSongs.downloadSong, sizeof(DownloadSong) * downloadSongs.numDownloadSong);
+        }
+    }
+
+    for (int i = 0; i < downloadPlayList.numDownloadList; i++){
+        for (int j = 0; j < downloadPlayList.downloadList[i].numDownloadSong; j++){
+            if (downloadPlayList.downloadList[i].downloadSong[j].actualLenght == downloadPlayList.downloadList[i].downloadSong[j].lenght){
+                cleanPointer(downloadPlayList.downloadList[i].downloadSong[j].path);
+                cleanPointer(downloadPlayList.downloadList[i].downloadSong[j].name);
+                cleanPointer(downloadPlayList.downloadList[i].downloadSong[j].md5sum);
+                
+                for (int k = j; k < downloadPlayList.downloadList[i].numDownloadSong - 1; k++){
+                    downloadPlayList.downloadList[i].downloadSong[k] = downloadPlayList.downloadList[i].downloadSong[k + 1];
+                }
+
+                downloadPlayList.downloadList[i].numDownloadSong--;
+                downloadPlayList.downloadList[i].downloadSong = realloc(downloadPlayList.downloadList[i].downloadSong, sizeof(DownloadSong) * downloadPlayList.downloadList[i].numDownloadSong);
+            }
+        }
+    }
+
+    showDownloads();
+}
 
 /**
  * 
@@ -413,8 +498,10 @@ void enterCommandMode() {
     char* command;
     char* SecondCommandWord = NULL;
     int command_case_num = -1;
-    int *delete = NULL;
-    int numDelete = 0;
+    char* buffer;
+
+    DownloadSong* downloadSong = NULL;
+    DownloadList* downloadList = NULL;
     
     FD_ZERO(&read_fds);
     FD_SET(STDIN_FILENO, &read_fds);
@@ -440,7 +527,6 @@ void enterCommandMode() {
                     break;
                 case LOGOUT_CMD:
                     disconnectFromPoole();
-                    printx("\n$ ");
                     break;
                 case LIST_SONGS_CMD:
                     sendFrame(0x02, LIST_SONGS, "", fd_socket);
@@ -451,61 +537,38 @@ void enterCommandMode() {
                     cleanPlayLists();
                     break;
                 case DOWNLOAD_SONG_CMD:
+                    
+                    downloadSong = malloc(sizeof(DownloadSong));
+                    downloadSong->name = strdup(SecondCommandWord);
+
+                    downloadSongs.numDownloadSong++;
+                    downloadSongs.downloadSong = realloc(downloadSongs.downloadSong, sizeof(DownloadSong) * downloadSongs.numDownloadSong);
+                    downloadSongs.downloadSong[downloadSongs.numDownloadSong - 1] = *downloadSong;
+
                     sendFrame(0x02, DOWNLOAD_SONG, SecondCommandWord, fd_socket);
                     cleanPointer(SecondCommandWord);
                     printx("\n$ ");
                     break;
                 case DOWNLOAD_PLAYLIST_CMD:
-                    printRes("Comanda OK\n");
+                    
+                    downloadList = malloc(sizeof(DownloadList));
+                    downloadList->name = strdup(SecondCommandWord);
+                    downloadList->numDownloadSong = 0;
+                    downloadList->downloadSong = NULL;
+
+                    downloadPlayList.numDownloadList++;
+                    downloadPlayList.downloadList = realloc(downloadPlayList.downloadList, sizeof(DownloadList) * downloadPlayList.numDownloadList);
+                    downloadPlayList.downloadList[downloadPlayList.numDownloadList - 1] = *downloadList;
+
+                    sendFrame(0x02, DOWNLOAD_LIST, SecondCommandWord, fd_socket);
+                    cleanPointer(SecondCommandWord);
+                    printx("\n$ ");
                     break;
                 case CHECK_DOWNLOADS_CMD:
-
-                    for(int i = 0; i < downloadList.numDownloadSong; i++){
-                        float percentage = (float)downloadList.downloadSong[i].actualLenght / (float)downloadList.downloadSong[i].lenght;
-                        
-                        asprintf(&buffer, "%ld/%ld\n ", downloadList.downloadSong[i].actualLenght, downloadList.downloadSong[i].lenght);
-                        printRes(buffer);
-                        cleanPointer(buffer);
-
-                        printRes(downloadList.downloadSong[i].name);
-                        asprintf(&buffer, "\t%.2f%% |", percentage * 100);
-                        printRes(buffer);
-                        cleanPointer(buffer);
-                        for(int j = 0; j < 20; j++){
-                            if (j < percentage * 20){
-                                printRes("=");
-                            }else{
-                                printRes(" ");
-                            }
-                        }
-                        printRes("|\n");
-                    }
-                    printx("\n$ ");
+                    showDownloads();
                     break;
                 case CLEAR_DOWNLOADS_CMD:
-                    delete = NULL;
-                    numDelete = 0;
-                    for(int i = 0; i < downloadList.numDownloadSong; i++){
-                        if (downloadList.downloadSong[i].actualLenght == downloadList.downloadSong[i].lenght){
-                            cleanPointer(downloadList.downloadSong[i].path);
-                            cleanPointer(downloadList.downloadSong[i].name);
-                            cleanPointer(downloadList.downloadSong[i].md5sum);
-                            downloadList.downloadSong[i].actualLenght = 0;
-                            downloadList.downloadSong[i].id = 0;
-                            downloadList.downloadSong[i].lenght = 0;
-                            delete = realloc(delete, sizeof(int) * (numDelete + 1));
-                            delete[numDelete] = i;
-                            numDelete++;
-                        }
-                    }
-                    for(int i = 0; i < numDelete; i++){
-                        for(int j = delete[i]; j < downloadList.numDownloadSong - 1; j++){
-                            downloadList.downloadSong[j] = downloadList.downloadSong[j + 1];
-                        }
-                        downloadList.numDownloadSong--;
-                        downloadList.downloadSong = realloc(downloadList.downloadSong, sizeof(DownloadSong) * downloadList.numDownloadSong);
-                    }
-                    printx("\n$ ");
+                    clearDownloads();
                     break;
                 case PARTIALLY_CORRECT_CMD:
                     printEr("Comanda KO\n");
@@ -548,40 +611,82 @@ void enterCommandMode() {
                 if (receive.type == 0x04){
                     //Response of petition for download a song.
                     DownloadSong downloadSong;
-                    downloadSong.name = strdup(strtok(receive.data, "&"));
+
+                    char* name = strdup(strtok (receive.data, "&"));
+                    char* playlistName = NULL;
+                    
                     downloadSong.lenght = atol(strtok(NULL, "&"));
+                    downloadSong.actualLenght = 0;
                     downloadSong.md5sum = strdup(strtok(NULL, "&"));
                     downloadSong.id = atoi(strtok(NULL, "&"));
-                    asprintf(&downloadSong.path, "bowmanProgram/data/Songs/%s", downloadSong.name);
-                    downloadSong.actualLenght = 0;
+                    
+                    if (strstr(name, "/") != NULL){
+                        playlistName = strtok (name, "/");
+                        name = strtok(NULL, "/");
+                    }
+                    downloadSong.name = strdup(name);
+                    
+                    if (playlistName != NULL){
+                        asprintf(&downloadSong.path, "bowmanProgram/data/%s/%s", playlistName, downloadSong.name);
+                        for (int i = 0; i < downloadPlayList.numDownloadList; i++){
+                            if (!strcmp(downloadPlayList.downloadList[i].name, playlistName)){
+                                downloadPlayList.downloadList[i].numDownloadSong++;
+                                downloadPlayList.downloadList[i].downloadSong = realloc(downloadPlayList.downloadList[i].downloadSong, sizeof(DownloadSong) * downloadPlayList.downloadList[i].numDownloadSong);
+                                downloadPlayList.downloadList[i].downloadSong[downloadPlayList.downloadList[i].numDownloadSong - 1] = downloadSong;
+                                
+                                break;
+                            }
+                        }
+                        asprintf(&buffer, "bowmanProgram/data/%s", playlistName);
+                        mkdir(buffer, 0777);
+                        cleanPointer(buffer);
 
-                    downloadList.numDownloadSong++;
-                    downloadList.downloadSong = realloc(downloadList.downloadSong, sizeof(DownloadSong) * downloadList.numDownloadSong);
-                    downloadList.downloadSong[downloadList.numDownloadSong - 1] = downloadSong;
-
-                    if (access(downloadSong.path, F_OK) != -1) {
-                        if (remove(downloadSong.path) != 0) {
-                            perror("Error al eliminar el archivo");
+                    }else{
+                        asprintf(&downloadSong.path, "bowmanProgram/data/%s", downloadSong.name);
+                        for (int i = 0; i < downloadSongs.numDownloadSong; i++){
+                            if (!strcmp(downloadSongs.downloadSong[i].name, downloadSong.name)){
+                                downloadSongs.downloadSong[i] = downloadSong;
+                                break;
+                            }
                         }
                     }
+                    remove(downloadSong.path);
                 }
             }else if (!strcmp(receive.header, FILE_DATA)){
                 if (receive.type == 0x04){
                     //Data from download song.
-                    int id = atoi(strtok(receive.data, "&"));
-                    char *data = strdup(strtok(NULL, "&"));
-                    if (data != NULL){
-                        for (int i = 0; i < downloadList.numDownloadSong; i++){
-                            if (downloadList.downloadSong[i].id == id){
-                                saveDataSong(&downloadList.downloadSong[i], data);
-                                cleanPointer(data);
+                    
+                    if (receive.data != NULL){
+                        char* temp_id = malloc(sizeof(char) * 5);
+                        char* delimiter = memccpy(temp_id, receive.data, '&', 5);
+
+                        int offset = delimiter - temp_id;
+                        temp_id[offset - 1] = '\0';
+
+                        int dataLength =  256 - 3 /* Type and header length */- strlen(FILE_DATA) - 1 - strlen(temp_id) - 1 /*&*/;
+                        int id = atoi(temp_id);
+                        
+                        
+                        for (int i = 0; i < downloadSongs.numDownloadSong; i++){
+                            if (downloadSongs.downloadSong[i].id == id){
+                                saveDataSong(&downloadSongs.downloadSong[i], receive.data + strlen(temp_id) + 1, dataLength);
                                 break;
                             }
                         }
+                        for (int i = 0; i < downloadPlayList.numDownloadList; i++){
+                            for (int j = 0; j < downloadPlayList.downloadList[i].numDownloadSong; j++){
+                                if (downloadPlayList.downloadList[i].downloadSong[j].id == id){
+                                    saveDataSong(&downloadPlayList.downloadList[i].downloadSong[j], receive.data + strlen(temp_id) + 1, dataLength);
+                                    break;
+                                }
+                            }
+                        }
                     }else{
-                        printEr("Error: yep we know the error :C\n");
+                        printEr("ERROR: Error receiving package\n");
                     }
+                    
                 }
+                
             }else if (!strcmp(receive.header, UNKNOWN)){
                 if (receive.type == 0x07){
                     //Error sending package
@@ -603,16 +708,13 @@ void enterCommandMode() {
 
 // Handle unexpected termination scenarios.
 void terminateExecution () {
+
     if (fd_config != -1){
         close (fd_config);
     }
 
     if (fd_socket != -1) {
         disconnectFromPoole();
-    }
-
-    if (buffer != NULL){
-        cleanPointer(buffer);
     }
 
     cleanClientConfig(&client_config);
@@ -629,6 +731,7 @@ void terminateExecution () {
 
 //main function :P
 int main (int argc, char** argv) {
+    char* buffer;
 
     signal(SIGINT, terminateExecution);
     signal(SIGTERM, terminateExecution);

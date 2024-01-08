@@ -69,6 +69,10 @@ typedef struct {
     char* data;            //Data (256 - 3 - X bytes)
 } Frame;
 
+void sendFrameSong (uint8_t type, char* header, char* data, int fd_socket, int data_length);
+
+Frame createFrameSong (uint8_t type, char* header, char* data, int data_length);
+
 void sendFrame (uint8_t type, char* header, char* data, int fd_socket);
 
 Frame receiveFrame (int fd_socket);

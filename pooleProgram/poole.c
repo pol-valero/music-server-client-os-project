@@ -391,9 +391,7 @@ long getLenghtArchive(const char *path) {
 }
 
 int getID() {
-    srand((unsigned int)time(NULL));
-
-    return rand()%1000;
+    return rand() % 1000;
 }
 
 char* getSongPath (char* name){
@@ -502,6 +500,8 @@ void processDownloadSong(char* name, ClientInfo* clientInfo){
         SEM_signal(&clientInfo->sender);
         return;
     }
+
+    
     
     downloadSong->ClientInfo = clientInfo;    
 
@@ -510,7 +510,7 @@ void processDownloadSong(char* name, ClientInfo* clientInfo){
     sendFrame(0x04, NEW_FILE, buffer, clientInfo->fd_client);
     SEM_signal(&clientInfo->sender);
     cleanPointer(buffer);
-    
+
     clientInfo->num_petitions++;
     clientInfo->threadPetitions = realloc(clientInfo->threadPetitions, sizeof(pthread_t) * clientInfo->num_petitions);
     pthread_create(&clientInfo->threadPetitions[clientInfo->num_petitions - 1], NULL, sendSong, downloadSong);
@@ -755,6 +755,8 @@ int main (int argc, char** argv) {
 
     signal(SIGINT, terminateExecution);
     signal(SIGTERM, terminateExecution);
+
+    srand((unsigned int)time(NULL));
     
     //This is for the semaphore which delete a client from the list of client
     SEM_constructor_with_name(&clearClients, ftok("clearSender", 7));

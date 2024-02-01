@@ -404,7 +404,6 @@ void saveDataSong(DownloadSong* downloadSong, char* data, int dataLength) {
             if (md5sum != NULL){
                 if (strcmp(md5sum, downloadSong->md5sum)){
                     printEr("ERROR: Song downloaded with errors\n");
-                    //TODO: Send frame.
                 }
                 cleanPointer(md5sum);
             }else{
@@ -549,6 +548,7 @@ void processNewFile(){
         name = strtok(NULL, "/");
     }
     downloadSong.name = strdup(name);
+    
 
     if (playlistName != NULL){
         asprintf(&downloadSong.path, "bowmanProgram/data/%s/%s", playlistName, downloadSong.name);
@@ -569,6 +569,8 @@ void processNewFile(){
         asprintf(&downloadSong.path, "bowmanProgram/data/Songs/%s", downloadSong.name);
         for (int i = 0; i < downloadSongs.numDownloadSong; i++){
             if (!strcmp(downloadSongs.downloadSong[i].name, downloadSong.name)){
+                cleanPointer(downloadSongs.downloadSong[i].name);
+                cleanPointer(name);
                 downloadSongs.downloadSong[i] = downloadSong;
                 break;
             }

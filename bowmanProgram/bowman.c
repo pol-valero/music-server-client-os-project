@@ -394,9 +394,12 @@ void saveDataSong(DownloadSong* downloadSong, char* data, int dataLength) {
     if (fd > 0){
         int bytesLeft = downloadSong->lenght - downloadSong->actualLenght;
         if (dataLength > bytesLeft){
-            write(fd, data, bytesLeft);
-            downloadSong->actualLenght += bytesLeft;
-
+            if(data != NULL){
+                write(fd, data, bytesLeft);
+                downloadSong->actualLenght += bytesLeft;
+            }else{
+                printEr("ERROR: Song downloaded with errors (Playlist)\n");
+            }
             char* md5sum = checkSongMD5SUM(downloadSong->path);
             if (md5sum != NULL){
                 if (strcmp(md5sum, downloadSong->md5sum)){
@@ -409,8 +412,12 @@ void saveDataSong(DownloadSong* downloadSong, char* data, int dataLength) {
             }
             
         }else{
-            write(fd, data, dataLength);
-            downloadSong->actualLenght += dataLength;
+            if(data != NULL){
+                write(fd, data, dataLength);
+                downloadSong->actualLenght += dataLength;
+            }else{
+                printEr("ELSE: Song downloaded with errors (Song)\n");
+            }
         }
         close(fd);
     }else{
@@ -440,11 +447,15 @@ void printDownloadSong(DownloadSong downloadSong){
 
 void showDownloads(){
     for(int i = 0; i < downloadSongs.numDownloadSong; i++){
-        printDownloadSong(downloadSongs.downloadSong[i]);
+        if (downloadSongs.downloadSong[i].id != -1){ 
+            printDownloadSong(downloadSongs.downloadSong[i]);
+        }
     }
     for (int i = 0; i < downloadPlayList.numDownloadList; i++){
-        for (int j = 0; j < downloadPlayList.downloadList[i].numDownloadSong; j++){
-            printDownloadSong(downloadPlayList.downloadList[i].downloadSong[j]);
+        if (downloadPlayList.downloadList[i].numDownloadSong != 0){
+            for (int j = 0; j < downloadPlayList.downloadList[i].numDownloadSong; j++){
+                printDownloadSong(downloadPlayList.downloadList[i].downloadSong[j]);
+            }
         }
     }
     
@@ -453,7 +464,7 @@ void showDownloads(){
 void clearDownloads() {
     // Limpiar descargas de canciones individuales
     for (int i = 0; i < downloadSongs.numDownloadSong; i++) {
-        if (downloadSongs.downloadSong[i].actualLenght == downloadSongs.downloadSong[i].lenght) {
+        if (downloadSongs.downloadSong[i].id != -1 && downloadSongs.downloadSong[i].actualLenght == downloadSongs.downloadSong[i].lenght) {
             cleanPointer(downloadSongs.downloadSong[i].path);
             cleanPointer(downloadSongs.downloadSong[i].name);
             cleanPointer(downloadSongs.downloadSong[i].md5sum);
@@ -538,7 +549,7 @@ void processNewFile(){
         name = strtok(NULL, "/");
     }
     downloadSong.name = strdup(name);
-    
+
     if (playlistName != NULL){
         asprintf(&downloadSong.path, "bowmanProgram/data/%s/%s", playlistName, downloadSong.name);
         for (int i = 0; i < downloadPlayList.numDownloadList; i++){
@@ -555,7 +566,7 @@ void processNewFile(){
         cleanPointer(buffer);
 
     }else{
-        asprintf(&downloadSong.path, "bowmanProgram/data/%s", downloadSong.name);
+        asprintf(&downloadSong.path, "bowmanProgram/data/Songs/%s", downloadSong.name);
         for (int i = 0; i < downloadSongs.numDownloadSong; i++){
             if (!strcmp(downloadSongs.downloadSong[i].name, downloadSong.name)){
                 downloadSongs.downloadSong[i] = downloadSong;

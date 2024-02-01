@@ -515,8 +515,6 @@ void processDownloadSong(char* name, ClientInfo* clientInfo){
         SEM_signal(&clientInfo->sender);
         return;
     }
-
-    
     
     downloadSong->ClientInfo = clientInfo;    
 
@@ -798,12 +796,9 @@ void createMonolit (){
             perror("Error al abrir el semáforo");
             exit(EXIT_FAILURE);
         }
-
         while (close_monolit == 0){
             char* buffer = readUntilChar(pipe_fd[0], '&');
-            SEM_wait(&sem);
             updateStats(buffer);
-            SEM_signal(&sem);
             cleanPointer(buffer);
         }
     }
@@ -811,19 +806,10 @@ void createMonolit (){
 
 // Handle unexpected termination scenarios.
 void terminateExecution () {
-    
     close(pipe_fd[0]); 
     close(pipe_fd[1]); 
 
     close_monolit = 1;
-
-    //Free the memory allocated for the server_config
-    cleanServerConfig(&server_config);
-    cleanFrame(&receive);
-    cleanClientInfo();
-    cleanPlayLists();
-
-    SEM_destructor(&clearClients);
 
     if(fd_socket != -1){
         cleanSockets(fd_socket);
@@ -831,9 +817,17 @@ void terminateExecution () {
     if(fd_config != -1){
         cleanSockets(fd_config);
     }
+    
+    //Free the memory allocated for the server_config
+    cleanServerConfig(&server_config);
+    cleanFrame(&receive);
+    cleanClientInfo();
+    cleanPlayLists();
 
-    pthread_exit(NULL);
-
+    SEM_destructor(&clearClients);
+    
+    printx("Poole terminated\n");
+    
     signal(SIGINT, SIG_DFL);
     raise(SIGINT);
 }
@@ -880,9 +874,9 @@ int main (int argc, char** argv) {
         return -1;
     }
 
-    loadSongs(current_dir);
-
     createMonolit();
+
+    loadSongs(current_dir);
 
     if (fd_socket != -1 && result){
         printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");

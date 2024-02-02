@@ -525,6 +525,23 @@ void downloadListSongs(char* name, ClientInfo* clientInfo){
     SEM_signal(&clientInfo->sender);
 }
 
+void decreasePooleConnectionNum() {
+
+    int fd_socket = startServerConnection(server_config.ip_discovery, server_config.port_discovery);
+
+    if (fd_socket < 0) {
+        printEr("ERROR: Cannot connect to the discovery server\n");
+    }
+
+    char* buffer;
+    asprintf(&buffer, "%d", server_config.port_poole);
+
+    sendFrame(0x06, EXIT, buffer, fd_socket);
+
+    free(buffer);
+
+}
+
 /**
  * 
  * Functions manage the client petitions
@@ -595,6 +612,8 @@ void* runServer(void* arg){
             SEM_signal(&clientInfo->sender);
         }
     } while (strcmp(receive.header, EXIT));
+
+    decreasePooleConnectionNum();
 
     return NULL;
 }

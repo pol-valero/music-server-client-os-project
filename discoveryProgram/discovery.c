@@ -118,8 +118,20 @@ void handlePooleFrameType(Frame frame, int fd_client, PooleStatsList* list) {
             break;
 
         case 0x06:
+
+            printDynStr(frame.data, strlen(frame.data));
+
+            char* poole_port = frame.data;
+            int poole_port_int = atoi(poole_port);
+
+            for (int i = 0; i < (*list).n_poole_stats; i++) {
+                if ((*list).poole_stats[i].port == poole_port_int) {
+                    (*list).poole_stats[i].n_connections--;
+                    break;
+                }
+            }
+
             //Bowman client disconnection from Poole
-            //TODO: Poole will send this frame with its name, ip and port so that we can decrease the number of connections of the Poole server
             break;
 
         case 0x07:

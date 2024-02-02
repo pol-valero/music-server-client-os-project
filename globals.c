@@ -58,7 +58,20 @@ void sendFrame (uint8_t type, char* header, char* data, int fd_socket) {
 Frame receiveFrame (int fd_socket) {
     char* buffer = malloc(sizeof(char) * 256);
 
-    read(fd_socket, buffer, 256);
+    int read_size = 0;
+    read_size = read(fd_socket, buffer, 256);
+
+
+    if (read_size != 256) {
+
+        Frame empty_frame;
+        asprintf(&empty_frame.header, "EMPTY_HEADER");
+        empty_frame.data = NULL;
+        empty_frame.type = -1;
+        empty_frame.header_length = -1;
+       return empty_frame;
+    }
+
     Frame frame = deserializeFrame(buffer);
     free(buffer);
 

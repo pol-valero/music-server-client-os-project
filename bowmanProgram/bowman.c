@@ -729,7 +729,6 @@ void enterCommandMode() {
                 }
             }else{
                 printEr("Error: Error receiving package\n");
-                sendFrame(0x02, UNKNOWN, "", fd_socket);
             }
         }
     } while (command_case_num != LOGOUT_CMD);

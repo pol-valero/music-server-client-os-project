@@ -121,6 +121,11 @@ char* serializeFrame(Frame frame) {
 
 Frame deserializeFrame(char* buffer) {
     Frame frame;
+    frame.header = NULL;
+    frame.data = NULL;
+    frame.type = -1;
+    frame.header_length = -1;
+
 
     int offset = 0;
 
@@ -136,6 +141,7 @@ Frame deserializeFrame(char* buffer) {
 
     frame.data = malloc(sizeof(char) * (256 - 3 - frame.header_length));
     memcpy(frame.data, buffer + offset, 256 - 3 - frame.header_length);
+    
 
     return frame;
 }

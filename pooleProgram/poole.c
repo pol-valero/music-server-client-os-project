@@ -23,11 +23,6 @@ typedef struct {
 } ClientInfo;
 
 typedef struct {
-    ClientInfo* clientInfo;
-    int numClients;
-} ClientsSockets;
-
-typedef struct {
     char* name;
     char* path;
     char** songs;
@@ -54,15 +49,10 @@ typedef struct {
  * Global variables
  * 
  */
-semaphore clearClients;
-
-ClientsSockets clients = { NULL, 0 };
 
 ServerConfig server_config = { NULL, NULL, NULL, 0, NULL, 0 };
 
 PlayLists playLists = { NULL, 0 };  
-
-Frame receive = {0, 0, NULL, NULL };
 
 int close_monolit = 0;
 
@@ -76,7 +66,6 @@ int pipe_fd[2];
 int fd_config = -1;
 
 int fd_socket = -1;
-
 
 /**
  * 
@@ -176,26 +165,10 @@ void cleanPlayLists() {
 void disconect(void* arg){
     ClientInfo* clientInfo = (ClientInfo*)arg;
     //TODO: manage phtreads, semaphores and sockets
-    SEM_wait(&clearClients);
-    for (int i = 0; i < clients.numClients; i++){
-        if (clients.clientInfo[i].fd_client == clientInfo->fd_client){
-            cleanPointer(clients.clientInfo[i].name);
-            for(int j = 0; j < clients.clientInfo[i].num_petitions; j++){
-                pthread_join(clients.clientInfo[i].threadPetitions[j], NULL);
-            }
-            free(clients.clientInfo[i].threadPetitions);
-            SEM_destructor(&clients.clientInfo[i].sender);
-
-            //This is for reallocate al the list of clients.
-            for (int j = i; j < clients.numClients - 1; j++) {
-                clients.clientInfo[j].fd_client = clients.clientInfo[j + 1].fd_client;
-            }
-            (clients.numClients)--;
-            //clients.clientInfo = realloc(clients.clientInfo, sizeof(ClientInfo) * (clients.numClients));  //TODO: solve this problem
-            break;
-        }
-    }
-    SEM_signal(&clearClients);
+    cleanPointer(clientInfo->name);
+    cleanPointer(clientInfo->threadPetitions);
+    close(clientInfo->fd_client);
+    free(clientInfo);
         
     sendFrame(0x06, RESPONSE_OK, "", clientInfo->fd_client);
     cleanSockets(clientInfo->fd_client);
@@ -517,14 +490,15 @@ void processDownloadSong(char* name, ClientInfo* clientInfo){
     }
     
     downloadSong->ClientInfo = clientInfo;    
-
+    
     asprintf(&buffer, "%s&%ld&%s&%d", downloadSong->songName, downloadSong->lenght, downloadSong->md5sum, downloadSong->id);
     SEM_wait(&clientInfo->sender);
     sendFrame(0x04, NEW_FILE, buffer, clientInfo->fd_client);
     SEM_signal(&clientInfo->sender);
 
     cleanPointer(buffer);
-
+    SEM_wait(&downloadSong->ClientInfo->sender);
+    SEM_signal(&downloadSong->ClientInfo->sender);
     clientInfo->num_petitions++;
     clientInfo->threadPetitions = realloc(clientInfo->threadPetitions, sizeof(pthread_t) * clientInfo->num_petitions);
     pthread_create(&clientInfo->threadPetitions[clientInfo->num_petitions - 1], NULL, sendSong, downloadSong);
@@ -559,8 +533,8 @@ void downloadListSongs(char* name, ClientInfo* clientInfo){
 
 void* runServer(void* arg){
     ClientInfo* clientInfo = (ClientInfo*)arg;
-    pthread_cleanup_push(disconect, clientInfo);
     char* buffer;
+    Frame receive = {0, 0, NULL, NULL};
     do{
         cleanFrame(&receive);
         receive = receiveFrame(clientInfo->fd_client);
@@ -622,14 +596,6 @@ void* runServer(void* arg){
         }
     } while (strcmp(receive.header, EXIT));
 
-    
-
-    pthread_cleanup_pop(1);
-    char* buffer;
-    asprintf(&buffer, "User -%s- disconnected\n\n", receive.data);
-    printRes(buffer);
-    cleanPointer(buffer);
-
     return NULL;
 }
 
@@ -639,34 +605,29 @@ void* runServer(void* arg){
  * 
  */
 
-void configureClient(int fd_temp){
-    SEM_wait(&clearClients);
-    int index = clients.numClients;
+void configureClient(int fd_temp, Frame receive){
+    
     char* buffer;
     //TODO: manage the threads from the client who had disconected already
-    clients.clientInfo = realloc(clients.clientInfo, sizeof(ClientInfo) * (index + 1));
+    ClientInfo* clientInfo;
+    clientInfo = malloc(sizeof(ClientInfo));
+
+    clientInfo->fd_client = fd_temp;
+    clientInfo->name = strdup(receive.data);
+
+    clientInfo->num_petitions = 0;
+    clientInfo->threadPetitions = NULL;
+
+    SEM_constructor_with_name(&clientInfo->sender, ftok(receive.data, rand() % 1000));
+    SEM_init(&clientInfo->sender, 1);
+
+    pthread_create(&clientInfo->threadClient, NULL, runServer, clientInfo);
     
-    
-    (clients.numClients)++;
-
-    clients.clientInfo[index].fd_client = fd_temp;
-    clients.clientInfo[index].name = strdup(receive.data);
-
-    clients.clientInfo[index].num_petitions = 0;
-    clients.clientInfo[index].threadPetitions = NULL;
-
-    SEM_constructor_with_name(&clients.clientInfo[index].sender, ftok(receive.data, clients.numClients));
-    SEM_init(&clients.clientInfo[index].sender, 1);
-
-    pthread_create(&clients.clientInfo[index].threadClient, NULL, runServer, &clients.clientInfo[index]);
-    
-    SEM_signal(&clearClients);
-
-    SEM_wait(&clients.clientInfo[index].sender);
+    SEM_wait(&clientInfo->sender);
     sendFrame(0x01, RESPONSE_OK, "", fd_temp);
-    SEM_signal(&clients.clientInfo[index].sender);
+    SEM_signal(&clientInfo->sender);
     
-    asprintf(&buffer, "New user connected: %s\n", clients.clientInfo[index].name);
+    asprintf(&buffer, "New user connected: %s\n", clientInfo->name);
     printx(buffer);
     cleanPointer(buffer);
 }
@@ -674,6 +635,7 @@ void configureClient(int fd_temp){
 void addClient(){
     struct sockaddr_in c_addr;
     socklen_t c_len = sizeof(c_addr);
+    Frame receive = {0, 0, NULL, NULL };
 
     int fd_temp = accept(fd_socket, (void *) &c_addr, &c_len);
     if (fd_temp == -1){
@@ -684,7 +646,7 @@ void addClient(){
     receive = receiveFrame(fd_temp);
 
     if (!strcmp(receive.header, BOWMAN_TO_POOLE)){
-        configureClient(fd_temp);
+        configureClient(fd_temp, receive);
     }else{
         sendFrame(0x07, UNKNOWN, "", fd_temp);
         cleanSockets(fd_temp);
@@ -699,6 +661,7 @@ void addClient(){
  */
 
 int doDiscoveryHandshake() {
+    Frame receive = {0, 0, NULL, NULL };
     int fd_socket = startServerConnection(server_config.ip_discovery, server_config.port_discovery);
     char* buffer;
     if (fd_socket < 0) {
@@ -727,18 +690,6 @@ int doDiscoveryHandshake() {
     }
 
     return 0;
-}
-
-void cleanClientInfo(){
-    if (clients.numClients > 0){
-        for (int i = 0; i < clients.numClients; i++){
-            cleanPointer(clients.clientInfo[i].name);
-            cleanSockets(clients.clientInfo[i].fd_client);
-            pthread_cancel(clients.clientInfo[i].threadClient);
-            pthread_join(clients.clientInfo[i].threadClient,NULL);
-        }
-        cleanPointer(clients.clientInfo);
-    }
 }
 
 //function that open a txt and search a name and update the number of petitions,if doesn't exist the name, add it. the file could be empty
@@ -820,11 +771,8 @@ void terminateExecution () {
     
     //Free the memory allocated for the server_config
     cleanServerConfig(&server_config);
-    cleanFrame(&receive);
-    cleanClientInfo();
     cleanPlayLists();
 
-    SEM_destructor(&clearClients);
     
     printx("Poole terminated\n");
     
@@ -838,10 +786,6 @@ int main (int argc, char** argv) {
     signal(SIGTERM, terminateExecution);
 
     srand((unsigned int)time(NULL));
-    
-    //This is for the semaphore which delete a client from the list of client
-    SEM_constructor_with_name(&clearClients, ftok("clearSender", 7));
-    SEM_init(&clearClients, 1);
 
     if (argc < 2) {
         printEr("\nERROR: You must enter a the configuration file name as a parameter\n");

@@ -118,7 +118,8 @@ void handlePooleFrameType(Frame frame, int fd_client, PooleStatsList* list) {
             break;
 
         case 0x06:
-
+            {
+                
             char* poole_port = frame.data;
             int poole_port_int = atoi(poole_port);
 
@@ -129,6 +130,7 @@ void handlePooleFrameType(Frame frame, int fd_client, PooleStatsList* list) {
                 }
             }
 
+            }
             //Bowman client disconnection from Poole
             break;
 

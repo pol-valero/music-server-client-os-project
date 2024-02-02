@@ -551,7 +551,7 @@ void processNewFile(){
     
 
     if (playlistName != NULL){
-        asprintf(&downloadSong.path, "bowmanProgram/data/%s/%s", playlistName, downloadSong.name);
+        asprintf(&downloadSong.path, "bowmanProgram/data/%s_%s/%s", playlistName, client_config.name, downloadSong.name);
         for (int i = 0; i < downloadPlayList.numDownloadList; i++){
             if (!strcmp(downloadPlayList.downloadList[i].name, playlistName)){
                 downloadPlayList.downloadList[i].numDownloadSong++;
@@ -561,12 +561,12 @@ void processNewFile(){
                 break;
             }
         }
-        asprintf(&buffer, "bowmanProgram/data/%s", playlistName);
+        asprintf(&buffer, "bowmanProgram/data/%s_%s", playlistName, client_config.name);
         mkdir(buffer, 0777);
         cleanPointer(buffer);
 
     }else{
-        asprintf(&downloadSong.path, "bowmanProgram/data/Songs/%s", downloadSong.name);
+        asprintf(&downloadSong.path, "bowmanProgram/data/Songs/%s_%s", downloadSong.name, client_config.name);
         for (int i = 0; i < downloadSongs.numDownloadSong; i++){
             if (!strcmp(downloadSongs.downloadSong[i].name, downloadSong.name)){
                 cleanPointer(downloadSongs.downloadSong[i].name);

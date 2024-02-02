@@ -119,8 +119,6 @@ void handlePooleFrameType(Frame frame, int fd_client, PooleStatsList* list) {
 
         case 0x06:
 
-            printDynStr(frame.data, strlen(frame.data));
-
             char* poole_port = frame.data;
             int poole_port_int = atoi(poole_port);
 

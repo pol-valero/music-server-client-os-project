@@ -423,7 +423,7 @@ void* sendSong(void* arg){
         sprintf(buffer, "%d", downloadSong->id);
         buffer[snprintf(NULL, 0, "%d", downloadSong->id)] = '&';
         memcpy(buffer + snprintf(NULL, 0, "%d", downloadSong->id) + 1, tempBuffer, bytesRead);
-        usleep(700);
+        usleep(10000);
         SEM_wait(&downloadSong->ClientInfo->sender);
         sendFrameSong(0x04, FILE_DATA, buffer, downloadSong->ClientInfo->fd_client, bufferSize);
         SEM_signal(&downloadSong->ClientInfo->sender);
@@ -524,6 +524,26 @@ void downloadListSongs(char* name, ClientInfo* clientInfo){
     sendFrame(0x04, RESPONSE_KO, "", clientInfo->fd_client);
     SEM_signal(&clientInfo->sender);
 }
+
+//
+void disconnectPooleServerFromDiscovery() {
+    int fd_socket = startServerConnection(server_config.ip_discovery, server_config.port_discovery);
+
+    if (fd_socket < 0) {
+        printEr("ERROR: Cannot connect to the discovery server\n");
+    }
+
+    char* buffer;
+    asprintf(&buffer, "%d", server_config.port_poole);
+
+    sendFrame(0x08, "DISCONNECT", buffer, fd_socket);
+
+    free(buffer);
+
+    close(fd_socket);
+
+}
+//
 
 void decreasePooleConnectionNum() {
 
@@ -776,6 +796,9 @@ void createMonolit (){
 
 // Handle unexpected termination scenarios.
 void terminateExecution () {
+
+    disconnectPooleServerFromDiscovery();
+
     close(pipe_fd[0]); 
     close(pipe_fd[1]); 
 

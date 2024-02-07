@@ -12,6 +12,7 @@ typedef struct {
 typedef struct {
     PooleStats* poole_stats;
     int n_poole_stats;
+    int n_available_poole;
 } PooleStatsList;
 
 int fd_config;
@@ -66,7 +67,7 @@ void printPooleStatsList (PooleStatsList list) {
         printDynStr(buffer, buffSize);
         free(buffer);
 
-        buffSize = asprintf(&buffer, "%s %s %d %d %d\n", list.poole_stats[i].name, list.poole_stats[i].ip, list.poole_stats[i].port, list.poole_stats[i].n_connections, list.poole_stats[i].available);
+        buffSize = asprintf(&buffer, "Name: %s Ip: %s Port:%d Connections:%d Available:%d\n", list.poole_stats[i].name, list.poole_stats[i].ip, list.poole_stats[i].port, list.poole_stats[i].n_connections, list.poole_stats[i].available);
         printDynStr(buffer, buffSize);
         free(buffer);
     }
@@ -87,17 +88,24 @@ void addPooleStatsToList (PooleStatsList *list, PooleStats poole_stats) {
 
 PooleStats findPooleWithMinConnections (PooleStatsList* list) {
 
-    int min_connections = (*list).poole_stats[0].n_connections;
+    //int min_connections = (*list).poole_stats[0].n_connections;
+
+    int min_connections = 1000000; //We set a big number to make sure that the first Poole server we find will have less connections
+
     int index_min_connections = 0;
 
-    for (int i = 1; i < (*list).n_poole_stats; i++) {
-        if ((*list).poole_stats[i].n_connections < min_connections) {
+
+    for (int i = 0; i < (*list).n_poole_stats; i++) {
+
+        if ((*list).poole_stats[i].n_connections < min_connections && (*list).poole_stats[i].available == 1){
             min_connections = (*list).poole_stats[i].n_connections;
             index_min_connections = i;
         }
     }
 
     (*list).poole_stats[index_min_connections].n_connections++; //We increase the number of connections of the selected Poole server
+    
+    //printPooleStatsList(*list);
 
     return (*list).poole_stats[index_min_connections];
 }
@@ -114,6 +122,8 @@ void handlePooleFrameType(Frame frame, int fd_client, PooleStatsList* list) {
             PooleStats poole_stats = createPooleStats(frame);
 
             addPooleStatsToList(list, poole_stats);
+            (*list).n_available_poole++;
+
             }
             break;
 
@@ -137,6 +147,22 @@ void handlePooleFrameType(Frame frame, int fd_client, PooleStatsList* list) {
         case 0x07:
             //If we receive this frame type, it means that the last frame we sent did not properly arrive
             //TODO: Send again the last frame? (We will have to have a variable with the last frame always saved)
+            break;
+        case 0x08:
+            //Poole server disconnection
+            {
+            char* poole_port = frame.data;
+            int poole_port_int = atoi(poole_port);
+
+            for (int i = 0; i < (*list).n_poole_stats; i++) {
+                if ((*list).poole_stats[i].port == poole_port_int && (*list).poole_stats[i].available == 1){
+                    (*list).poole_stats[i].available = 0;
+                    (*list).n_available_poole--;
+                    break;
+                }
+            }
+            }
+
             break;
     }
 
@@ -233,7 +259,7 @@ void* listenForBowmanConnections(void* arg) {
         //If the frame is valid, we will send to Bowman the info of the Poole that has the least connections
         if (frameIsValid(frame)) {
             
-            if ((*list).n_poole_stats == 0) {
+            if ((*list).n_poole_stats == 0 || (*list).n_available_poole == 0){
                 sendFrame(0x01, RESPONSE_KO, "", fd_client); 
             } else {
                 handleBowmanFrameType(frame, fd_client, list);
@@ -253,7 +279,7 @@ void* listenForBowmanConnections(void* arg) {
 
 void listenForConnections() {
 
-    PooleStatsList list = {.n_poole_stats = 0, .poole_stats = NULL};
+    PooleStatsList list = {.n_poole_stats = 0, .poole_stats = NULL, .n_available_poole = 0};
 
     pthread_t thread_poole;
     pthread_t thread_bowman;

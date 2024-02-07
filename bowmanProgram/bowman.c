@@ -729,6 +729,7 @@ void enterCommandMode() {
                 }
             }else{
                 printEr("Error: Error receiving package\n");
+                command_case_num = LOGOUT_CMD;
             }
         }
     } while (command_case_num != LOGOUT_CMD);

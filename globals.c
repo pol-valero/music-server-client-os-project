@@ -160,7 +160,7 @@ Frame deserializeFrame(char* buffer) {
 }
 
 int frameIsValid(Frame frame) {
-    if (frame.type < 0x01 || frame.type > 0x07) {
+    if (frame.type < 0x01 || frame.type > 0x08) {
         return 0;
     }
 

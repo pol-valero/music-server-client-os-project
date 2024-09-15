@@ -1,80 +1,113 @@
-## Instalación
+## Music server and client project, with connection load balancing
 
-1. **Clonar el Repositorio:**
+This project consisted in developing a system that allowed a set of devices using Linux to communicate with each other using sockets and the TCP/IP network, in order to transfer music from a server to a client. 
+
+The system allows multiple music servers, multiple concurrent clients and has a connection load balancing server that helps with connecting each new user to the server that has the least load at the moment. 
+
+Each server and client is a different process in the Linux device. The Poole processes are the music servers where the music is stored and transfered from. The Bowman processes are the different clients that want to see and download music and playlists. The Discovery process is the load balancing server, which distributes the load among the different Poole servers. 
+
+
+## Instructions
+
+0. **Song insertion**
+
+   Place your song.mp3 files in the pooleProgram/data folder. Create a specific folder to insert the songs in a playlist. These songs and playlists will be available for all Bowman clients to download. 
+
+1. **Start Discovery server**
    ```bash
-   git clone https://tu-repositorio.git
+   ./discovery (config_file_name)
    ```
 
-2. **Compilar el Proyecto:**
+2. **Start Poole server**
    ```bash
-   cd tu-repositorio
-   make
+   ./poole (config_file_name)
    ```
 
-3. **Configuración de Canciones:**
-   - Coloca tus archivos de canciones en la carpeta `pooleProgram/data`. Crea una carpeta específica para organizar tus archivos.
-## Uso
-
-1. **Iniciar Discovery:**
+3. **Start Bowman server**
    ```bash
-   ./discovery (Nombre_configuracion)
+   ./bowman (config_file_name)
    ```
 
-2. **Iniciar Poole:**
-   ```bash
-   ./poole (Nombre_configuracion)
-   ```
+4. **Connect to Poole server**
+  In Bowman, use the following command to connect to Poole:
+    ```bash
+    connect
+    ```
 
-3. **Iniciar Bowman:**
-   ```bash
-   ./bowman (Nombre_configuracion)
-   ```
-
-4. **Conectar a Poole:**
-   - En Bowman, utiliza el siguiente comando para conectarte a Poole:
-     ```bash
-     connect
-     ```
-
-5. **Utilizar las Funciones Disponibles:**
-   - Listar Canciones:
+5. **Use available functions**
+   - List songs
      ```bash
      list song
      ```
 
-   - Listar Playlists:
+   - List playlists
      ```bash
      list playlist
      ```
 
-   - Descargar Canción:
+   - Download song
      ```bash
-     download (song).mp3
+     download (songName).mp3
      ```
 
-   - Descargar Playlist:
+   - Download playlist
      ```bash
-     download (Playlist)
+     download (playlistName)
      ```
 
-   - Verificar Descargas:
+   - See downloads
      ```bash
      check downloads
      ```
 
-   - Limpiar Descargas:
+   - Erase downloads
      ```bash
      clear downloads
      ```
 
-   - Cerrar Sesión:
+   - Logout
      ```bash
      logout
      ```
     
-Las canciones y playlist descargadas se ubican en `bowmanProgram/data`.
+The downloaded songs and playlists are located in bowmanProgram/data.
 
-## Importante
-Para poner los archivos de descarga/configuracion hay que pasar-lo con fileZilla o algun programa similar, ya que en formato windows puede provocar problemas.
+## Config files format
 
-Es especialmente importante que los archivos de configuracion se creen en el entorno Linux utilizando Vim o similar, ya que de lo de contrario algunas veces las Strings de los archivos no son leidas correctamente
+- Bowman config file
+
+  //User name   
+  //Folder where user files are located  
+  //IP of Discovery server  
+  //Port of Discovery server
+
+- Poole config file
+
+  //User name   
+  //Folder where user files are located  
+  //IP of Discovery server  
+  //Port of Discovery server
+  //IP where Poole server will be opened  
+  //Port where Poole server will be opened
+
+- Discovery config file
+
+  //IP of Discovery server where it will listen for Poole connections  
+  //Port of Discovery server where it will listen for Poole connections  
+  //IP of Discovery server where it will listen for Bowman connections  
+  //Port of Discovery server where it will listen for Bowman connections 
+
+<br/>
+
+**IMPORTANT**:
+It is especially important that configuration files are created in the Linux environment using Vim or similar, as otherwise some file strings may not be read correctly.
+
+## Connection diagram
+
+![Alt text](images/1.png)
+
+## Authors
+
+[Pol Valero] (https://github.com/pol-valero)
+
+[Alex Liu] (https://github.com/Alello23)

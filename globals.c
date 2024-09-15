@@ -1,5 +1,50 @@
 #include "globals.h"
 
+void sendFrameSong (uint8_t type, char* header, char* data, int fd_socket, int data_length) {
+
+    Frame frame = createFrameSong(type, header, data, data_length);
+    
+    char* buffer = serializeFrame(frame);
+    write(fd_socket, buffer, 256);
+    
+    free(buffer);
+    free(frame.header);
+    free(frame.data);
+}
+
+
+Frame createFrameSong(uint8_t type, char* header, char* data, int data_length) {
+    
+    Frame frame;
+
+    uint16_t header_length = strlen(header) + 1;    //We add 1 to the length to include the '\0' character
+    uint16_t data_field_length = 256 - 3 - header_length;
+    
+    frame.type = type;
+    frame.header_length = header_length;
+
+    frame.header = malloc(sizeof(char) * header_length);
+    strcpy(frame.header, header);
+
+    if (data_length == data_field_length) {
+        frame.data = malloc(sizeof(char) * data_field_length);
+        memcpy(frame.data, data, data_length);  //If the data has exactly the size of the data field, we can just point to it.
+    } else {
+        char* allocatedData;
+
+        allocatedData = malloc(sizeof(char) * data_field_length); //If the data is smaller than the data field, we need request more memory and add padding.
+
+        memcpy(allocatedData, data, data_length); //We copy the data to the allocated memory
+        memset(allocatedData + data_length, '\0', data_field_length - data_length); //We add '\0' as a padding to the data field.
+        //allocatedData + data_length = starting position of the padding
+        //data_field_length - data_length = number of '\0' padding to add
+        
+        frame.data = allocatedData;
+    }
+
+    return frame;
+}
+
 void sendFrame (uint8_t type, char* header, char* data, int fd_socket) {
 
     Frame frame = createFrame(type, header, data);
@@ -11,9 +56,22 @@ void sendFrame (uint8_t type, char* header, char* data, int fd_socket) {
 }
 
 Frame receiveFrame (int fd_socket) {
-
     char* buffer = malloc(sizeof(char) * 256);
-    read(fd_socket, buffer, 256);
+
+    int read_size = 0;
+    read_size = read(fd_socket, buffer, 256);
+
+
+    if (read_size != 256) {
+
+        Frame empty_frame;
+        asprintf(&empty_frame.header, "EMPTY_HEADER");
+        empty_frame.data = NULL;
+        empty_frame.type = -1;
+        empty_frame.header_length = -1;
+       return empty_frame;
+    }
+
     Frame frame = deserializeFrame(buffer);
     free(buffer);
 
@@ -27,7 +85,7 @@ Frame createFrame(uint8_t type, char* header, char* data) {
     uint16_t header_length = strlen(header) + 1;    //We add 1 to the length to include the '\0' character
     uint16_t data_length = strlen(data) + 1;
     uint16_t data_field_length = 256 - 3 - header_length;
-
+    
     frame.type = type;
     frame.header_length = header_length;
 
@@ -47,7 +105,7 @@ Frame createFrame(uint8_t type, char* header, char* data) {
         memset(allocatedData + data_length, '\0', data_field_length - data_length); //We add '\0' as a padding to the data field.
         //allocatedData + data_length = starting position of the padding
         //data_field_length - data_length = number of '\0' padding to add
-
+        
         frame.data = allocatedData;
     }
 
@@ -76,6 +134,11 @@ char* serializeFrame(Frame frame) {
 
 Frame deserializeFrame(char* buffer) {
     Frame frame;
+    frame.header = NULL;
+    frame.data = NULL;
+    frame.type = -1;
+    frame.header_length = -1;
+
 
     int offset = 0;
 
@@ -91,12 +154,13 @@ Frame deserializeFrame(char* buffer) {
 
     frame.data = malloc(sizeof(char) * (256 - 3 - frame.header_length));
     memcpy(frame.data, buffer + offset, 256 - 3 - frame.header_length);
+    
 
     return frame;
 }
 
 int frameIsValid(Frame frame) {
-    if (frame.type < 0x01 || frame.type > 0x07) {
+    if (frame.type < 0x01 || frame.type > 0x08) {
         return 0;
     }
 
@@ -144,7 +208,6 @@ int startServer(int port, char *ip) {
 
 
 int startServerConnection(char* ip, int port) {
-
     char* buffer; 
 
     struct sockaddr_in socket_addr;
@@ -156,7 +219,6 @@ int startServerConnection(char* ip, int port) {
         printx("Error while creating socket\n");
 
     } else {
-
         memset(&socket_addr, 0, sizeof(socket_addr));
         socket_addr.sin_family = AF_INET;
         socket_addr.sin_port = htons(port);
@@ -167,15 +229,13 @@ int startServerConnection(char* ip, int port) {
             asprintf(&buffer, "Connection error with the server: %s\n", strerror(errno));
             printx(buffer);
             cleanSockets(socket_conn);
-            free(buffer);
+            cleanPointer(buffer);
 
             return -1;
         }
 
     }
-
     return socket_conn;
-
 }
 
 // Read characters until reaching either endChar or endChar2. If endChar2 is found, set endChar2Found to 1.

@@ -3,6 +3,10 @@
 
 #include "sys/select.h"
 #include <dirent.h>
+#include "../semaphore_2v.h"
+
+#define MAX_NAME_LENGTH 50
+#define FILENAME "stats.txt"
 
 /**
  * 
@@ -11,14 +15,12 @@
  */
 typedef struct {
     pthread_t threadClient;
+    pthread_t* threadPetitions;
+    semaphore sender;
+    int num_petitions;
     int fd_client;
     char* name;
 } ClientInfo;
-
-typedef struct {
-    ClientInfo* clientInfo;
-    int numClients;
-} ClientsSockets;
 
 typedef struct {
     char* name;
@@ -31,6 +33,16 @@ typedef struct {
     PlayList* playList;
     int numPlayList;
 } PlayLists;
+typedef struct {
+    ClientInfo* ClientInfo;
+    int id;
+    long lenght;
+    char* songName;
+    char* md5sum;
+    char* path;
+} DownloadSong;
+
+
 
 /**
  * 
@@ -38,16 +50,13 @@ typedef struct {
  * 
  */
 
-ClientsSockets Clients = { NULL, 0 };
-
 ServerConfig server_config = { NULL, NULL, NULL, 0, NULL, 0 };
 
 PlayLists playLists = { NULL, 0 };  
 
-Frame receive = { 0, 0, NULL, NULL };
+int close_monolit = 0;
 
-char* buffer;
-
+int pipe_fd[2];
 /**
  * 
  * Sockets file descriptors
@@ -69,7 +78,7 @@ void updatePlaylist(const char *playlistName) {
     playLists.playList = realloc(playLists.playList, sizeof(PlayList) * playLists.numPlayList);
 
     playLists.playList[playLists.numPlayList - 1].name = strdup(playlistName);
-    asprintf(&playLists.playList[playLists.numPlayList - 1].path, "%s/%s", PATH, playlistName);
+    asprintf(&playLists.playList[playLists.numPlayList - 1].path, "%s", playlistName); //TODO: Write this better
     playLists.playList[playLists.numPlayList - 1].songs = NULL;
     playLists.playList[playLists.numPlayList - 1].numSongs = 0;
 }
@@ -127,14 +136,14 @@ int loadSongs(const int fd_dir) {
 }
 
 void freePlayList(PlayList* playlist) {
-    free(playlist->name);
-    free(playlist->path);
+    cleanPointer(playlist->name);
+    cleanPointer(playlist->path);
 
     for (int i = 0; i < playlist->numSongs; i++) {
-        free(playlist->songs[i]);
+        cleanPointer(playlist->songs[i]);
     }
 
-    free(playlist->songs);
+    cleanPointer(playlist->songs);
 }
 
 void cleanPlayLists() {
@@ -143,7 +152,7 @@ void cleanPlayLists() {
         for (int i = 0; i < playLists.numPlayList; i++) {
             freePlayList(&(playLists.playList[i]));
         }
-        free(playLists.playList);
+        cleanPointer(playLists.playList);
     }
 } 
 
@@ -153,26 +162,16 @@ void cleanPlayLists() {
  * 
  */
 
-void disconect(int fd_client){
-    if (Clients.numClients > 0){
-        for (int i = 0; i < Clients.numClients; i++){
-            if (Clients.clientInfo[i].fd_client == fd_client){
-                free(Clients.clientInfo[i].name);
-                for (int j = i; j < Clients.numClients - 1; j++) {
-                    Clients.clientInfo[j].fd_client = Clients.clientInfo[j + 1].fd_client;
-                }
-                (Clients.numClients)--;
-                Clients.clientInfo = realloc(Clients.clientInfo, sizeof(ClientInfo) * (Clients.numClients));
-                break;
-            }
-        }
-    }else {
-        (Clients.numClients)--;
-        free(Clients.clientInfo);
-    }
-    
-    sendFrame(0x06, RESPONSE_OK, "", fd_client);
-    cleanSockets(fd_client);
+void disconect(void* arg){
+    ClientInfo* clientInfo = (ClientInfo*)arg;
+    //TODO: manage phtreads, semaphores and sockets
+    cleanPointer(clientInfo->name);
+    cleanPointer(clientInfo->threadPetitions);
+    close(clientInfo->fd_client);
+    free(clientInfo);
+        
+    sendFrame(0x06, RESPONSE_OK, "", clientInfo->fd_client);
+    cleanSockets(clientInfo->fd_client);
 }
 
 /**
@@ -181,43 +180,53 @@ void disconect(int fd_client){
  * 
  */
 
-void sendAllSongs(int fd_client) {
+void* sendAllSongs(void* arg) {
+    ClientInfo* clientInfo = (ClientInfo*)arg;
+
     if (playLists.numPlayList == 0 || playLists.playList[0].numSongs == 0){
-        sendFrame(0x02, SONGS_RESPONSE, "NO_HAY_CANCIONES&0", fd_client);
-        return;
+        SEM_wait(&clientInfo->sender);
+        sendFrame(0x02, SONGS_RESPONSE, "NO_HAY_CANCIONES&0", clientInfo->fd_client);
+        SEM_signal(&clientInfo->sender);
+        return NULL;
     }
     int first = 1;
-
+    char* buffer;
     char *tempBuffer;
-    asprintf(&buffer, "test");
+    asprintf(&buffer, "test"); //TODO: memory leak
     for (int i = 0; i < playLists.numPlayList; i++){
         for (int j = 0; j < playLists.playList[i].numSongs; j++){
             if (strlen(buffer) + strlen(playLists.playList[i].songs[j]) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
                 if (first){
-                    free(buffer);
+                    cleanPointer(buffer);
                     asprintf(&buffer, "%s", playLists.playList[i].songs[j]);
                     first = 0;
                 }else{
                     asprintf(&tempBuffer, "%s&%s", buffer, playLists.playList[i].songs[j]);
-                    free(buffer);
+                    cleanPointer(buffer);
                     buffer = tempBuffer;
                 }
             }else{
                 asprintf(&tempBuffer, "%s&1", buffer);
-                free(buffer); 
-                buffer = tempBuffer; 
-                sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
-                free(buffer);
+                cleanPointer(buffer); 
+                buffer = tempBuffer;
+                SEM_wait(&clientInfo->sender);
+                sendFrame(0x02, SONGS_RESPONSE, buffer, clientInfo->fd_client);
+                SEM_signal(&clientInfo->sender);
+                cleanPointer(buffer);
 
                 asprintf(&buffer, "%s", playLists.playList[i].songs[j]);
             }
         }
     }
     asprintf(&tempBuffer, "%s&0", buffer);
-    free(buffer); 
+    cleanPointer(buffer); 
     buffer = tempBuffer;
-    sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
-    free(buffer);
+    SEM_wait(&clientInfo->sender);
+    sendFrame(0x02, SONGS_RESPONSE, buffer, clientInfo->fd_client);
+    SEM_signal(&clientInfo->sender);
+    cleanPointer(buffer);
+
+    return NULL;
 }
 
 /**
@@ -226,10 +235,14 @@ void sendAllSongs(int fd_client) {
  * 
  */
 
-void sendAllPlaylists(int fd_client) {
+void* sendAllPlaylists(void* arg) {
+    char* buffer;
+    ClientInfo* clientInfo = (ClientInfo*)arg;
     if (playLists.numPlayList == 0 || playLists.playList[0].numSongs == 0){
-        sendFrame(0x02, SONGS_RESPONSE, "NO_HAY_CANCIONES&0", fd_client);
-        return;
+        SEM_wait(&clientInfo->sender);
+        sendFrame(0x02, PLAYLISTS_RESPONSE, "NO_HAY_CANCIONES&0", clientInfo->fd_client);
+        SEM_signal(&clientInfo->sender);
+        return NULL;
     }
     int first = 1;
     asprintf(&buffer, "%s", playLists.playList[0].name);
@@ -237,16 +250,18 @@ void sendAllPlaylists(int fd_client) {
     char* tempBuffer;
     for (int i = 0; i < playLists.numPlayList; i++){
         if (!first){
-            if (strlen(buffer) + strlen(playLists.playList[i].name) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
+            if (strlen(buffer) + strlen(playLists.playList[i].name) + 1 < 256 - 6 - strlen(PLAYLISTS_RESPONSE)) {
                 asprintf(&tempBuffer, "%s#%s", buffer, playLists.playList[i].name);
-                free(buffer);
+                cleanPointer(buffer);
                 buffer = tempBuffer;
             }else{
                 asprintf(&tempBuffer, "%s&2", buffer);
-                free(buffer);
+                cleanPointer(buffer);
                 buffer = tempBuffer;
-                sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
-                free(buffer);
+                SEM_wait(&clientInfo->sender);
+                sendFrame(0x02, PLAYLISTS_RESPONSE, buffer, clientInfo->fd_client);
+                SEM_signal(&clientInfo->sender);
+                cleanPointer(buffer);
                 
                 asprintf(&buffer, "%s", playLists.playList[i].name);
             }
@@ -254,16 +269,18 @@ void sendAllPlaylists(int fd_client) {
             first = 0;
         }
         for (int j = 0; j < playLists.playList[i].numSongs; j++){
-            if (strlen(buffer) + strlen(playLists.playList[i].songs[j]) + 1 < 256 - 6 - strlen(SONGS_RESPONSE)) {
+            if (strlen(buffer) + strlen(playLists.playList[i].songs[j]) + 1 < 256 - 6 - strlen(PLAYLISTS_RESPONSE)) {
                 asprintf(&tempBuffer, "%s&%s", buffer, playLists.playList[i].songs[j]);
-                free(buffer);
+                cleanPointer(buffer);
                 buffer = tempBuffer;
             }else{
                 asprintf(&tempBuffer, "%s&1", buffer);
-                free(buffer);
+                cleanPointer(buffer);
                 buffer = tempBuffer;
-                sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
-                free(buffer);
+                SEM_wait(&clientInfo->sender);
+                sendFrame(0x02, PLAYLISTS_RESPONSE, buffer, clientInfo->fd_client);
+                SEM_signal(&clientInfo->sender);
+                cleanPointer(buffer);
 
                 asprintf(&buffer, "%s", playLists.playList[i].songs[j]);
             }
@@ -272,10 +289,277 @@ void sendAllPlaylists(int fd_client) {
     }
     
     asprintf(&tempBuffer, "%s&0", buffer);
-    free(buffer);
+    cleanPointer(buffer);
     buffer = tempBuffer;
-    sendFrame(0x02, SONGS_RESPONSE, buffer, fd_client);
+    SEM_wait(&clientInfo->sender);
+    sendFrame(0x02, PLAYLISTS_RESPONSE, buffer, clientInfo->fd_client);
+    SEM_signal(&clientInfo->sender);
+    cleanPointer(buffer);
+
+    return NULL;
+}
+
+/**
+ * 
+ * Functions for download the song 
+ * 
+ */
+
+char* checkSongMD5SUM (char* path){
+    char *openssl_command[] = {"md5sum", path, NULL};
+    char* buffer;
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        perror("pipe");
+        return NULL;
+    }
+
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        perror("fork");
+         return NULL;
+    }
+
+    if (pid == 0) {  // Proceso hijo
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO); 
+
+        execvp("md5sum", openssl_command);
+
+        perror("execvp");
+        return NULL;
+    } else {  // Proceso padre
+        close(pipefd[1]);
+
+        int status;
+        waitpid(pid, &status, 0); 
+
+        if (WIFEXITED(status)) {
+            // Read the output of the md5sum command from the pipe
+            buffer = malloc (sizeof(char) * 1024);
+            
+            ssize_t bytesRead;
+            
+            bytesRead = read(pipefd[0], buffer, 1024);
+            buffer[bytesRead] = '\0';
+            
+            char *token = strdup(strtok(buffer, " "));
+            
+            close(pipefd[0]);
+            cleanPointer(buffer);
+            return token;
+        } else {
+            printEr("El proceso hijo terminó con error.\n");
+            close(pipefd[0]);
+        }
+
+        close(pipefd[0]);
+    }
+
+    cleanPointer(path);
+
+    return NULL;
+}
+
+long getLenghtArchive(const char *path) {
+    struct stat statArchivo;
+    if (stat(path, &statArchivo) == -1) {
+        perror("Error al obtener información del archivo");
+        return -1;
+    }
+
+    return statArchivo.st_size;
+}
+
+int getID() {
+    return rand() % 1000;
+}
+
+char* getSongPath (char* name){
+    char* buffer;
+    for (int i = 0; i < playLists.numPlayList; i++)    {
+        for (int j = 0; j < playLists.playList[i].numSongs; j++){
+            if (!strcmp(name, playLists.playList[i].songs[j])){
+                asprintf(&buffer, "%s/%s", playLists.playList[i].path, name);
+                return buffer;
+            }
+        }
+    }
+    return NULL;
+}
+
+void clearDownloadSong(DownloadSong* downloadSong){
+    if (downloadSong->songName != NULL){
+        cleanPointer(downloadSong->songName);
+    }
+    if (downloadSong->md5sum != NULL){
+        cleanPointer(downloadSong->md5sum);
+    }
+    if (downloadSong->path != NULL){
+        cleanPointer(downloadSong->path);
+    }
+}
+
+void* sendSong(void* arg){
+    DownloadSong* downloadSong = (DownloadSong*)arg;
+
+    int fd_song = open(downloadSong->path, O_RDONLY);
+
+    if (fd_song == -1){
+        printEr("Error: Cannot open the song\n");
+        return NULL;
+    }
+
+    int lengthFrame = 256 - 3 /* Type and header length */- strlen(FILE_DATA) - 1 /*\0*/ - snprintf(NULL, 0, "%d", downloadSong->id) - 1 /*&*/;
+    char tempBuffer[lengthFrame];
+    int bytesRead;
+
+    char* buffer;
+    
+    while((bytesRead = read (fd_song, tempBuffer, lengthFrame)) > 0){
+        int bufferSize = snprintf(NULL, 0, "%d", downloadSong->id) + 1 + bytesRead;
+        buffer = malloc(sizeof(char) * bufferSize);
+        sprintf(buffer, "%d", downloadSong->id);
+        buffer[snprintf(NULL, 0, "%d", downloadSong->id)] = '&';
+        memcpy(buffer + snprintf(NULL, 0, "%d", downloadSong->id) + 1, tempBuffer, bytesRead);
+        usleep(10000);
+        SEM_wait(&downloadSong->ClientInfo->sender);
+        sendFrameSong(0x04, FILE_DATA, buffer, downloadSong->ClientInfo->fd_client, bufferSize);
+        SEM_signal(&downloadSong->ClientInfo->sender);
+        cleanPointer(buffer);
+    }
+
+    close(fd_song);
+    cleanPointer(downloadSong->songName);
+    cleanPointer(downloadSong->md5sum);
+    cleanPointer(downloadSong->path);
+    
+    return NULL;
+}
+
+void processDownloadSong(char* name, ClientInfo* clientInfo){
+    DownloadSong* downloadSong;
+    char* buffer;
+    downloadSong = malloc(sizeof(DownloadSong));
+    
+    downloadSong->songName = strdup(name);
+
+    if (strchr(name, '/') != NULL){
+        strtok(name, "/");
+        char* temp_name = strtok(NULL, "/");
+        downloadSong->path = strdup(getSongPath(temp_name));
+        write(pipe_fd[1], temp_name, strlen(temp_name));
+        write(pipe_fd[1], "&", 1);
+    }else{
+        downloadSong->path = strdup(getSongPath(name));
+        write(pipe_fd[1], name, strlen(name));
+        write(pipe_fd[1], "&", 1);  
+    }
+    
+    if(downloadSong->path == NULL){
+        printEr("Error: The song doesn't exist\n");
+        SEM_wait(&clientInfo->sender);
+        sendFrame(0x04, RESPONSE_KO, "", clientInfo->fd_client);
+        SEM_signal(&clientInfo->sender);
+        return;
+    }
+    downloadSong->md5sum = checkSongMD5SUM(downloadSong->path);
+    if(downloadSong->md5sum == NULL){
+        printEr("Error: The md5sum of the song is NULL\n");
+        SEM_wait(&clientInfo->sender);
+        sendFrame(0x04, RESPONSE_KO, "", clientInfo->fd_client);
+        SEM_signal(&clientInfo->sender);
+        return;
+    }
+    downloadSong->lenght = getLenghtArchive(downloadSong->path);
+    if(downloadSong->lenght == -1){
+        printEr("Error: The lenght of the song is -1\n");
+        SEM_wait(&clientInfo->sender);
+        sendFrame(0x04, RESPONSE_KO, "", clientInfo->fd_client);
+        SEM_signal(&clientInfo->sender);
+        return;
+    }
+    downloadSong->id = getID();
+    if(downloadSong->id == -1){
+        printEr("Error: The id of the song is -1\n");
+        SEM_wait(&clientInfo->sender);
+        sendFrame(0x04, RESPONSE_KO, "", clientInfo->fd_client);
+        SEM_signal(&clientInfo->sender);
+        return;
+    }
+    
+    downloadSong->ClientInfo = clientInfo;    
+    
+    asprintf(&buffer, "%s&%ld&%s&%d", downloadSong->songName, downloadSong->lenght, downloadSong->md5sum, downloadSong->id);
+    SEM_wait(&clientInfo->sender);
+    sendFrame(0x04, NEW_FILE, buffer, clientInfo->fd_client);
+    SEM_signal(&clientInfo->sender);
+
+    cleanPointer(buffer);
+    SEM_wait(&downloadSong->ClientInfo->sender);
+    SEM_signal(&downloadSong->ClientInfo->sender);
+    clientInfo->num_petitions++;
+    clientInfo->threadPetitions = realloc(clientInfo->threadPetitions, sizeof(pthread_t) * clientInfo->num_petitions);
+    pthread_create(&clientInfo->threadPetitions[clientInfo->num_petitions - 1], NULL, sendSong, downloadSong);
+}
+
+/**
+ * 
+ * Functions for download a list of songs 
+ * 
+ */
+void downloadListSongs(char* name, ClientInfo* clientInfo){
+    char* buffer;
+    for (int i = 0; i < playLists.numPlayList; i++){
+        if (strcmp(name, playLists.playList[i].name) == 0){
+            for (int j = 0; j < playLists.playList[i].numSongs; j++){
+                asprintf(&buffer, "%s/%s", name,playLists.playList[i].songs[j]);
+                processDownloadSong(buffer, clientInfo);
+            }
+            return;
+        }
+    }
+    SEM_wait(&clientInfo->sender);
+    sendFrame(0x04, RESPONSE_KO, "", clientInfo->fd_client);
+    SEM_signal(&clientInfo->sender);
+}
+
+//
+void disconnectPooleServerFromDiscovery() {
+    int fd_socket = startServerConnection(server_config.ip_discovery, server_config.port_discovery);
+
+    if (fd_socket < 0) {
+        printEr("ERROR: Cannot connect to the discovery server\n");
+    }
+
+    char* buffer;
+    asprintf(&buffer, "%d", server_config.port_poole);
+
+    sendFrame(0x08, "DISCONNECT", buffer, fd_socket);
+
     free(buffer);
+
+    close(fd_socket);
+
+}
+//
+
+void decreasePooleConnectionNum() {
+
+    int fd_socket = startServerConnection(server_config.ip_discovery, server_config.port_discovery);
+
+    if (fd_socket < 0) {
+        printEr("ERROR: Cannot connect to the discovery server\n");
+    }
+
+    char* buffer;
+    asprintf(&buffer, "%d", server_config.port_poole);
+
+    sendFrame(0x06, EXIT, buffer, fd_socket);
+
+    free(buffer);
+
 }
 
 /**
@@ -285,47 +569,71 @@ void sendAllPlaylists(int fd_client) {
  */
 
 void* runServer(void* arg){
-    ClientInfo clientInfo = *((ClientInfo*)arg);
+    ClientInfo* clientInfo = (ClientInfo*)arg;
+    char* buffer;
+    Frame receive = {0, 0, NULL, NULL};
     do{
         cleanFrame(&receive);
-        receive = receiveFrame(clientInfo.fd_client);
+        receive = receiveFrame(clientInfo->fd_client);
         if(!strcmp(receive.header, LIST_SONGS)){
-            asprintf(&buffer, "New request - %s requires the list of songs.\n", clientInfo.name);
+            asprintf(&buffer, "New request - %s requires the list of songs.\n", clientInfo->name);
             printQue(buffer);
-            free(buffer);
-            
-            sendAllSongs(clientInfo.fd_client);
+            cleanPointer(buffer);
 
-            asprintf(&buffer, "Sending song list to %s\n\n", clientInfo.name);
+            clientInfo->num_petitions++;
+            clientInfo->threadPetitions = realloc(clientInfo->threadPetitions, sizeof(pthread_t) * clientInfo->num_petitions);
+            pthread_create(&clientInfo->threadPetitions[clientInfo->num_petitions - 1], NULL, sendAllSongs, clientInfo);
+
+            asprintf(&buffer, "Sending song list to %s\n\n", clientInfo->name);
             printRes(buffer);
-            free(buffer);
-        } else if(!strcmp(receive.header, LIST_PLAYLISTS)){
-            asprintf(&buffer, "New request - %s requires the list of playlists.\n", clientInfo.name);
+            cleanPointer(buffer);
+        }else if(!strcmp(receive.header, LIST_PLAYLISTS)){
+            asprintf(&buffer, "New request - %s requires the list of playlists.\n", clientInfo->name);
             printQue(buffer);
-            free(buffer);
+            cleanPointer(buffer);
             
-            sendAllPlaylists(clientInfo.fd_client);
+            clientInfo->num_petitions++;
+            clientInfo->threadPetitions = realloc(clientInfo->threadPetitions, sizeof(pthread_t) * clientInfo->num_petitions);
+            pthread_create(&clientInfo->threadPetitions[clientInfo->num_petitions - 1], NULL, sendAllPlaylists, clientInfo);
 
-            asprintf(&buffer, "Sending playlist list to %s\n\n", clientInfo.name);
+            asprintf(&buffer, "Sending playlist list to %s\n\n", clientInfo->name);
             printRes(buffer);
-            free(buffer);
+            cleanPointer(buffer);
+        }else if(!strcmp(receive.header, DOWNLOAD_SONG)){
+            asprintf(&buffer, "New request – %s wants to download %s\n", clientInfo->name, receive.data);
+            printQue(buffer);
+            cleanPointer(buffer);
+
+            processDownloadSong(receive.data, clientInfo);
+
+            asprintf(&buffer,"Sending %s to %s\n\n", receive.data,clientInfo->name);
+            printRes(buffer);
+            cleanPointer(buffer);
+        }else if(!strcmp(receive.header, DOWNLOAD_LIST)){
+            asprintf(&buffer, "New request – %s wants to download the playlist %s.\n", clientInfo->name, receive.data);
+            printQue(buffer);
+            cleanPointer(buffer);
+
+            downloadListSongs(receive.data, clientInfo);
+
+            asprintf(&buffer,"Sending %s to %s.\n\n", receive.data,clientInfo->name);
+            printRes(buffer);
+            cleanPointer(buffer);
+        }else if (!strcmp(receive.header, UNKNOWN)){
+            printEr("Error: last packet sent was lost\n");
         }else if (!strcmp(receive.header, EXIT)){
             asprintf(&buffer, "New request - %s requires disconnection\n", receive.data);
             printQue(buffer);
-            free(buffer);
-
-            disconect(clientInfo.fd_client);
-
-            asprintf(&buffer, "User -%s- disconnected\n\n", receive.data);
-            printRes(buffer);
-            free(buffer);
-        }else if (!strcmp(receive.header, UNKNOWN)){
-            printEr("Error: last packet sent was lost\n");
+            cleanPointer(buffer);
         }else{
             printEr("Error: Error receiving package\n");
-            sendFrame(0x02, UNKNOWN, "", clientInfo.fd_client);
+            SEM_wait(&clientInfo->sender);
+            sendFrame(0x02, UNKNOWN, "", clientInfo->fd_client);
+            SEM_signal(&clientInfo->sender);
         }
     } while (strcmp(receive.header, EXIT));
+
+    decreasePooleConnectionNum();
 
     return NULL;
 }
@@ -336,32 +644,37 @@ void* runServer(void* arg){
  * 
  */
 
-void configureClient(int fd_temp){
-    int index = Clients.numClients;
-        
-    if (index == 0){
-        Clients.clientInfo = malloc(sizeof(ClientInfo));
-    }else{
-        Clients.clientInfo = realloc(Clients.clientInfo, sizeof(ClientInfo) * (index + 1));
-    }
+void configureClient(int fd_temp, Frame receive){
     
-    (Clients.numClients)++;
+    char* buffer;
+    //TODO: manage the threads from the client who had disconected already
+    ClientInfo* clientInfo;
+    clientInfo = malloc(sizeof(ClientInfo));
 
-    Clients.clientInfo[index].fd_client = fd_temp;
-    Clients.clientInfo[index].name = strdup(receive.data);
+    clientInfo->fd_client = fd_temp;
+    clientInfo->name = strdup(receive.data);
 
-    pthread_create(&Clients.clientInfo[index].threadClient, NULL, runServer, &Clients.clientInfo[index]);
+    clientInfo->num_petitions = 0;
+    clientInfo->threadPetitions = NULL;
 
+    SEM_constructor_with_name(&clientInfo->sender, ftok(receive.data, rand() % 1000));
+    SEM_init(&clientInfo->sender, 1);
+
+    pthread_create(&clientInfo->threadClient, NULL, runServer, clientInfo);
+    
+    SEM_wait(&clientInfo->sender);
     sendFrame(0x01, RESPONSE_OK, "", fd_temp);
+    SEM_signal(&clientInfo->sender);
     
-    asprintf(&buffer, "New user connected: %s\n", Clients.clientInfo[index].name);
+    asprintf(&buffer, "New user connected: %s\n", clientInfo->name);
     printx(buffer);
-    free(buffer);
+    cleanPointer(buffer);
 }
 
 void addClient(){
     struct sockaddr_in c_addr;
     socklen_t c_len = sizeof(c_addr);
+    Frame receive = {0, 0, NULL, NULL };
 
     int fd_temp = accept(fd_socket, (void *) &c_addr, &c_len);
     if (fd_temp == -1){
@@ -372,7 +685,7 @@ void addClient(){
     receive = receiveFrame(fd_temp);
 
     if (!strcmp(receive.header, BOWMAN_TO_POOLE)){
-        configureClient(fd_temp);
+        configureClient(fd_temp, receive);
     }else{
         sendFrame(0x07, UNKNOWN, "", fd_temp);
         cleanSockets(fd_temp);
@@ -387,8 +700,9 @@ void addClient(){
  */
 
 int doDiscoveryHandshake() {
+    Frame receive = {0, 0, NULL, NULL };
     int fd_socket = startServerConnection(server_config.ip_discovery, server_config.port_discovery);
-
+    char* buffer;
     if (fd_socket < 0) {
         printEr("ERROR: Cannot connect to the discovery server\n");
         return 0;
@@ -398,7 +712,7 @@ int doDiscoveryHandshake() {
 
     sendFrame(0x01, POOLE_TO_DISCOVERY, buffer, fd_socket);
 
-    free(buffer);
+    cleanPointer(buffer);
 
     cleanFrame(&receive);
     receive = receiveFrame(fd_socket);
@@ -416,23 +730,79 @@ int doDiscoveryHandshake() {
 
     return 0;
 }
-void cleanClientInfo(){
-    if (Clients.numClients > 0){
-        for (int i = 0; i < Clients.numClients; i++){
-            free(Clients.clientInfo[i].name);
-            cleanSockets(Clients.clientInfo[i].fd_client);
+
+//function that open a txt and search a name and update the number of petitions,if doesn't exist the name, add it. the file could be empty
+void updateStats(const char *name){
+    int fd_stats = open(FILENAME, O_RDWR | O_CREAT, 0666);
+    if (fd_stats == -1){
+        printEr("Error: Cannot open the file\n");
+        return;
+    }
+    char* buffer = NULL;
+    while ((buffer = readUntilChar(fd_stats, '\n')) != NULL && strlen(buffer) > 0){
+        char* temp_name = strtok(buffer, "&");
+        if (!strcmp(temp_name, name)){
+            char* temp_petitions = strtok(NULL, "&");
+            int petitions = atoi(temp_petitions);
+            petitions++;
+            lseek(fd_stats, -strlen(temp_petitions) - 1, SEEK_CUR);
+            char* buffer;
+            asprintf(&buffer, "%d", petitions);
+            write(fd_stats, buffer, strlen(buffer));
+            cleanPointer(buffer);
+            return;
         }
-        free(Clients.clientInfo);
+    }
+    lseek(fd_stats, 0, SEEK_END);
+    asprintf(&buffer, "%s&1\n", name);
+    write(fd_stats, buffer, strlen(buffer));
+    cleanPointer(buffer);
+    close(fd_stats);
+}
+
+void createMonolit (){
+    pid_t pid;
+
+    // Crear el pipe
+    if (pipe(pipe_fd) == -1) {
+        perror("Error al crear el pipe");
+        exit(EXIT_FAILURE);
+    }
+
+    // Crear un nuevo proceso
+    pid = fork();
+
+    if (pid == -1) {
+        perror("Error al crear el proceso");
+        exit(EXIT_FAILURE);
+    }
+
+    if (pid == 0) { 
+        semaphore sem;
+
+        // Crear o abrir el semáforo
+        int semResult = SEM_constructor_with_name(&sem, ftok("poole", 'S'));
+        if (semResult < 0) {
+            perror("Error al abrir el semáforo");
+            exit(EXIT_FAILURE);
+        }
+        while (close_monolit == 0){
+            char* buffer = readUntilChar(pipe_fd[0], '&');
+            updateStats(buffer);
+            cleanPointer(buffer);
+        }
     }
 }
 
 // Handle unexpected termination scenarios.
 void terminateExecution () {
-    //Free the memory allocated for the server_config
-    cleanServerConfig(&server_config);
-    cleanFrame(&receive);
-    cleanClientInfo();
-    cleanPlayLists();
+
+    disconnectPooleServerFromDiscovery();
+
+    close(pipe_fd[0]); 
+    close(pipe_fd[1]); 
+
+    close_monolit = 1;
 
     if(fd_socket != -1){
         cleanSockets(fd_socket);
@@ -440,16 +810,24 @@ void terminateExecution () {
     if(fd_config != -1){
         cleanSockets(fd_config);
     }
+    
+    //Free the memory allocated for the server_config
+    cleanServerConfig(&server_config);
+    cleanPlayLists();
 
+    
+    printx("Poole terminated\n");
+    
     signal(SIGINT, SIG_DFL);
     raise(SIGINT);
 }
 
 //main function :p
 int main (int argc, char** argv) {
-
     signal(SIGINT, terminateExecution);
     signal(SIGTERM, terminateExecution);
+
+    srand((unsigned int)time(NULL));
 
     if (argc < 2) {
         printEr("\nERROR: You must enter a the configuration file name as a parameter\n");
@@ -482,11 +860,14 @@ int main (int argc, char** argv) {
         return -1;
     }
 
+    createMonolit();
+
     loadSongs(current_dir);
 
     if (fd_socket != -1 && result){
         printx("Connected to HAL 9000 System, ready to listen to Bowmans petitions\n");
         printx("\nWaiting for connections...\n\n");
+
         while (1){
             addClient();
         }

@@ -16,6 +16,6 @@
 #define NO_CMD 11
 
 
-int commandToCmdCaseNum(char* command);
+int commandToCmdCaseNum(char* command, char** SecondCommandWord);
 
 #endif

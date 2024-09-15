@@ -72,6 +72,9 @@
      logout
      ```
     
-Esta adición indica claramente dónde encontrar las descargas en la carpeta `bowmanProgram/data`. ¡Espero que sea útil!
+Las canciones y playlist descargadas se ubican en `bowmanProgram/data`.
+
 ## Importante
-Para poner los archivos de descarga/configuracion hay que pasar-lo con fileZilla o algun programa similar, ya que en formato windows puede provocar problemas 
+Para poner los archivos de descarga/configuracion hay que pasar-lo con fileZilla o algun programa similar, ya que en formato windows puede provocar problemas.
+
+Es especialmente importante que los archivos de configuracion se creen en el entorno Linux utilizando Vim o similar, ya que de lo de contrario algunas veces las Strings de los archivos no son leidas correctamente
